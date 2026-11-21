@@ -1,3 +1,18 @@
+# RWX Blast Radius
+
+The default Dockerfile now builds the baseline observation candidate described in
+[OBSERVATIONS.md](OBSERVATIONS.md). Its measured public median is 140.429 seconds
+including local CPU with zero misses. The previous entrypoint measured 210.415
+seconds on the same machine. Linux amd64 and hidden-batch results remain pending.
+
+The build runs the pinned baseline tests to collect operand relations and source
+metadata readers. Runtime selection combines those observations with the existing
+coverage, fixture, IPC and scheduling maps. Expensive original-test verification
+runs only when a baseline cost measurement justifies it.
+
+The prior query-checkpoint candidate remains available through
+`docker build -f Dockerfile.checkpoint ...`. Its earlier research notes follow.
+
 **Experimental scoring entrypoint:** the top-level Dockerfile now builds baseline checkpoints and cost profiles and starts `run_candidate.py`. It runs calibrated whole-test verification, then restricted checkpoint execution; failures fall back to the reference path. The Docker build is **not verified locally** (daemon access denied). The original static candidate remains in `Dockerfile.reference`. Check the image build before submitting a commit. The 209.604-second combined result was a macOS research measurement, not a scored Linux container result.
 
 **Next candidate:** see [NEXT_RUN.md](NEXT_RUN.md). Adaptive selection plus child-process evidence reproduces **234.350 simulated seconds / zero public-sample misses**, with about 1.88 seconds of local selector CPU. The organizer result for this revision is not measured.

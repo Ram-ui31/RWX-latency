@@ -1,3 +1,9 @@
+# Current proposal revision
+
+The implemented next run uses baseline operand observations and source metadata
+dependencies. [OBSERVATIONS.md](OBSERVATIONS.md) contains its theory, measurements,
+limitations and rejected approaches. Earlier proposal material follows as history.
+
 > **Implementation result:** `rwx_next/IMPLEMENTATION.md` records the new pipeline and source-evidence repair. The official local sample scorer reports **250.453 simulated seconds / zero misses** using the mixed local profile plus source-derived IPC closure. Canonical validation, fine-grained state reconstruction and pass-omission promotion remain pending.
 
 # RWX proposal: input-conditioned incremental validation

@@ -8,13 +8,13 @@ RUN python /app/tools/download_pinned_source.py /app/pinned-source
 COPY blast/ /app/blast/
 COPY engine/ /app/engine/
 COPY research/tail_verifier/ /app/research/tail_verifier/
-COPY research/incremental_executor/ /app/research/incremental_executor/
+COPY research/observations/ /app/research/observations/
 COPY selector.py run_candidate.py build-catalog.json /app/
 COPY maps/source-index.json.gz /app/maps/source-index.json.gz
 COPY tools/check_native.py /app/tools/check_native.py
 RUN python -X faulthandler /app/tools/check_native.py
-RUN mkdir /app/assets && python -X faulthandler /app/research/incremental_executor/build.py --source /app/pinned-source --output /app/assets/base.pkl.gz
-RUN python /app/research/incremental_executor/build_dependencies.py --source /app/pinned-source --capsule /app/assets/base.pkl.gz --output /app/assets/checkpoints.pkl.gz && rm /app/assets/base.pkl.gz /app/assets/base.pkl.gz.json
+ENV RWX_OBSERVATIONS=/app/assets/observations.json.gz
+RUN mkdir /app/assets && python /app/research/observations/build.py --source /app/pinned-source --catalog /app/build-catalog.json --output ${RWX_OBSERVATIONS}
 RUN python /app/research/tail_verifier/calibrate.py --source /app/pinned-source --catalog /app/build-catalog.json --numbers 1224 --output /app/assets/verification-costs.json --timeout 60
 RUN chmod -R a+rX /app
 USER 65534:65534

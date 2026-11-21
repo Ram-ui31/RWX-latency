@@ -26,7 +26,7 @@ def best_action(selected,durations,excluded):
     return max(actions,default=(0,None))
 
 def main():
- ap=argparse.ArgumentParser();ap.add_argument('--source',type=Path,required=True);ap.add_argument('--data',type=Path,required=True);ap.add_argument('--report',type=Path,required=True);ap.add_argument('--predictions',type=Path,required=True);ap.add_argument('--wall-budget',type=float,default=45);ap.add_argument('--cpu-budget',type=float,default=60);ap.add_argument('--action-timeout',type=float,default=8);ap.add_argument('--min-saving',type=float,default=5);ap.add_argument('--max-actions',type=int,default=5);ap.add_argument('--cost-profile',type=Path);ap.add_argument('--allow-uncalibrated-experiment',action='store_true');a=ap.parse_args()
+ ap=argparse.ArgumentParser();ap.add_argument('--source',type=Path,required=True);ap.add_argument('--data',type=Path,required=True);ap.add_argument('--report',type=Path,required=True);ap.add_argument('--predictions',type=Path,required=True);ap.add_argument('--wall-budget',type=float,default=45);ap.add_argument('--cpu-budget',type=float,default=60);ap.add_argument('--action-timeout',type=float,default=8);ap.add_argument('--min-saving',type=float,default=5);ap.add_argument('--max-actions',type=int,default=5);ap.add_argument('--cost-profile',type=Path);ap.add_argument('--observations',type=Path);ap.add_argument('--allow-uncalibrated-experiment',action='store_true');a=ap.parse_args()
  if min(a.cpu_budget,a.min_saving,a.max_actions)<0 or a.action_timeout<=0:ap.error('invalid budget')
  start=time.process_time();wall=time.monotonic();usage=resource.getrusage(resource.RUSAGE_CHILDREN)
  def cpu():
@@ -34,13 +34,24 @@ def main():
  source=a.source.resolve()
  from engine.source_origin import verify
  verify(source)
- tests,ids,ds=load_catalog(a.data/'tests.json');index=SourceIndex(ROOT/'maps/source-index.json.gz',ids);ipc=consumers(index.payload,tests)
+ tests,ids,ds=load_catalog(a.data/'tests.json');index=SourceIndex(ROOT/'maps/source-index.json.gz',ids)
+ observer=None
+ if a.observations:
+  from research.observations.choose import Observations
+  observer=Observations(a.observations,index)
+ else:
+  ipc=consumers(index.payload,tests)
  rows={};texts={}
  for patch in sorted((a.data/'commits').glob('*.patch')):
-  text=patch.read_text();selected,reason=adaptive_select(index,text)
+  text=patch.read_text()
   try:
-   for e in parse_patch(text):selected.update(ipc.get(e.old_path,[]))
-  except ValueError:selected=set(ds)
+   if observer:
+    selected,reason=observer.select(text),'baseline_observations'
+   else:
+    selected,reason=adaptive_select(index,text)
+    for e in parse_patch(text):selected.update(ipc.get(e.old_path,[]))
+  except (ValueError,SyntaxError,OSError):
+   selected,reason=set(ds),'unsupported_patch'
   texts[patch.stem]=text;rows[patch.stem]={'initial':sorted(selected),'selected':set(selected),'reason':reason,'actions':[],'tried':set()}
  actions=0
  cost_data={}
@@ -51,11 +62,18 @@ def main():
   if profile.get('baseline_only') and profile.get('fingerprint')==fingerprint():
    cost_data=profile['costs'];cost_profile_status='local_fingerprint_match'
   else:cost_profile_status='mismatch'
+ # A test without a passing baseline calibration cannot authorize an action.
+ calibrated={ids[node] for node,record in cost_data.items() if node in ids and record.get('status')=='observed_pass'}
  skipped={}
  while actions<a.max_actions and cpu()<a.cpu_budget and time.monotonic()-wall<a.wall_budget:
   choices=[];rejected_this_round=False
   for c,r in rows.items():
-   gain,n=best_action(r['selected'],ds,r['tried'])
+   if observer and not a.allow_uncalibrated_experiment:
+    available=(r['selected'] & calibrated) - r['tried']
+    if not available:continue
+    gain,n=best_action(r['selected'],ds,r['selected']-available)
+   else:
+    gain,n=best_action(r['selected'],ds,r['tried'])
    if n is not None and gain>=a.min_saving:
     decision=gate(gain,a.cpu_budget-cpu(),cost_data.get(tests[n]['id']))
     if not decision['allowed'] and not a.allow_uncalibrated_experiment:

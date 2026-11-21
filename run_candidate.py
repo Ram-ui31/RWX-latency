@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Protocol entrypoint for the explicitly experimental checkpoint candidate."""
+"""Protocol entrypoint for baseline observations or checkpoint validation."""
 import json,os,subprocess,sys,tempfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parent
@@ -13,7 +13,10 @@ def main():
  data=Path(os.environ.get('DATA_DIR','/data'));source=ROOT/'pinned-source'
  with tempfile.TemporaryDirectory(prefix='rwx-batch-') as folder:
   folder=Path(folder);upstream=folder/'upstream.jsonl';final=folder/'final.jsonl'
-  run([ROOT/'research/tail_verifier/evaluate.py','--source',source,'--data',data,'--cost-profile',ROOT/'assets/verification-costs.json','--report',folder/'tail.json','--predictions',upstream,'--max-actions','5','--min-saving','2','--cpu-budget','20','--action-timeout','8','--wall-budget','45'])
+  observations=os.environ.get('RWX_OBSERVATIONS')
+  run([ROOT/'research/tail_verifier/evaluate.py','--source',source,'--data',data,'--cost-profile',ROOT/'assets/verification-costs.json','--report',folder/'tail.json','--predictions',upstream,'--max-actions','5','--min-saving','2','--cpu-budget','20','--action-timeout','8','--wall-budget','45',*(['--observations',observations] if observations else [])])
+  if observations:
+   sys.stdout.write(upstream.read_text());sys.stdout.flush();return
   try:
    run([ROOT/'research/incremental_executor/compose.py','--source',source,'--capsule',ROOT/'assets/checkpoints.pkl.gz','--data',data,'--upstream',upstream,'--output',final,'--report',folder/'checkpoint.json','--wall-budget','95'])
   except (RuntimeError,OSError):final=upstream
