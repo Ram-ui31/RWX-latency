@@ -13,13 +13,14 @@ from blast.scheduling import optimize_schedule
 from blast.selection import SourceIndex
 from blast.patches import parse_patch
 from engine.ipc import consumers as ipc_consumers
+from engine.selection import adaptive_select
 
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--data-dir',type=Path,default=Path(os.environ.get('DATA_DIR','/data')))
     parser.add_argument('--index',type=Path,default=Path(__file__).resolve().parent/'maps/source-index.json.gz')
-    parser.add_argument('--mode',choices=['all','module','coverage','hybrid','impact'],default=os.environ.get('RWX_SELECTION_MODE','all'))
+    parser.add_argument('--mode',choices=['all','module','coverage','hybrid','impact','adaptive'],default=os.environ.get('RWX_SELECTION_MODE','all'))
     args=parser.parse_args()
     start=time.process_time()
     tests, ids, durations=load_catalog(args.data_dir/'tests.json')
@@ -36,11 +37,15 @@ def main():
             selected,reason=set(durations),'all_tests_baseline'
         else:
             try:
-                selected,reason=index.select(patch.read_text(encoding='utf-8'),args.mode)
+                text=patch.read_text(encoding='utf-8')
+                selected,reason=adaptive_select(index,text) if args.mode=='adaptive' else index.select(text,args.mode)
             except (UnicodeError,OSError):
                 selected,reason=set(durations),'unreadable_patch_fallback'
-        for change in parse_patch(patch.read_text(encoding='utf-8')):
-            selected.update(ipc.get(change.old_path,[]))
+        try:
+            for change in parse_patch(patch.read_text(encoding='utf-8')):
+                selected.update(ipc.get(change.old_path,[]))
+        except (ValueError,UnicodeError,OSError):
+            selected,reason=set(durations),'invalid_patch_fallback'
         workers=schedule(tuple(sorted(selected)))
         print(json.dumps(dict(commit=patch.stem,workers=workers),separators=(',',':')),flush=True)
         reasons[reason]+=1

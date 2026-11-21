@@ -1,0 +1,44 @@
+name: Native amd64 candidate check
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm native x86 runner
+        run: |
+          uname -m
+          test "$(uname -m)" = "x86_64"
+      - name: Build under the ten-minute time limit
+        shell: bash
+        run: |
+          set -o pipefail
+          timeout 600 docker build --platform linux/amd64 --progress=plain -t rwx-checkpoint . 2>&1 | tee build.log
+      - name: Inspect built candidate
+        run: |
+          docker image inspect rwx-checkpoint --format '{{.Architecture}}'
+          docker run --rm --network none --cpus 2 --memory 4g --pids-limit 256 --read-only --tmpfs /tmp:rw,size=64m --entrypoint python3 rwx-checkpoint -c "import pathlib,json; p=pathlib.Path('/app/assets/checkpoints.pkl.gz'); assert p.is_file(); m=json.loads(pathlib.Path(str(p)+'.json').read_text()); assert m['baseline_query_results_verified']; print('Baseline checkpoints verified and runtime assets present')"
+      - name: Smoke test the actual entrypoint offline
+        shell: bash
+        run: |
+          smoke_container=$(docker create rwx-checkpoint)
+          docker cp "$smoke_container:/app/pinned-source/sqlglot/optimizer/eliminate_ctes.py" /tmp/rwx-rule.py
+          docker rm "$smoke_container"
+          python3 tools/make_smoke.py /tmp/rwx-rule.py /tmp/rwx-smoke
+          timeout 170 docker run --rm --network none --cpus 2 --memory 4g --pids-limit 256 --read-only --tmpfs /tmp:rw,size=64m -v /tmp/rwx-smoke:/data:ro rwx-checkpoint > smoke-output.jsonl 2> smoke-stderr.log
+          python3 -c "import json; r=json.loads(open('smoke-output.jsonl').read()); assert set(r)=={'commit','workers'} and r['commit']=='smoke'; assert len(r['workers'])<=8; ns=[n for w in r['workers'] for n in w]; assert len(ns)==len(set(ns)) and all(type(n) is int and 0<=n<1620 for n in ns)"
+          if grep -E 'Traceback|Experimental candidate failed' smoke-stderr.log; then exit 1; fi
+      - name: Retain build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-amd64-build-log
+          path: |
+            build.log
+            smoke-output.jsonl
+            smoke-stderr.log

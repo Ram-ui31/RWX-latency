@@ -70,7 +70,7 @@ class PatchedTree:
     def __exit__(self,*args): self.temp.cleanup()
 
 
-def run_test(tree, nodeid, timeout):
+def run_test(tree, nodeid, timeout, adapter=None):
     """A skip, partial execution or harness failure is unresolved, never pass."""
     plugin=tree.path.parent/'rwx_evidence_plugin.py';plugin.write_text(PLUGIN)
     output=tree.path.parent/'result.json';output.unlink(missing_ok=True)
@@ -82,6 +82,12 @@ def run_test(tree, nodeid, timeout):
     # Explicitly load timeout; pytest 9 includes native subtest reporting.
     args=[sys.executable,'-B','-m','pytest','-p','rwx_evidence_plugin','-p','pytest_timeout',
           '-p','no:cacheprovider','-q',nodeid]
+    if adapter is not None:
+        from .fixture_adapter import PLUGIN as ADAPTER_PLUGIN
+        (plugin.parent/'rwx_fixture_plugin.py').write_text(ADAPTER_PLUGIN)
+        env['RWX_ADAPTER']=json.dumps(adapter)
+        env['RWX_ADAPTER_HITS']=str(plugin.parent/'hits.json')
+        args[args.index('-q'):args.index('-q')]=['-p','rwx_fixture_plugin']
     with tempfile.TemporaryFile() as logs:
         proc=subprocess.Popen(args,cwd=tree.path,env=env,stdout=logs,stderr=logs,start_new_session=True)
         timed_out=False
@@ -96,4 +102,8 @@ def run_test(tree, nodeid, timeout):
         if any(r['outcome']=='failed' for r in reports): result['status']='confirmed_fail'
         elif proc.returncode==0 and any(r['nodeid']==nodeid and r['when']=='call' and r['outcome']=='passed' for r in reports) and not any(r['outcome']=='skipped' for r in reports):
             result['status']='observed_pass'
+    if adapter is not None:
+        hits=plugin.parent/'hits.json'
+        result['records_visited']=json.loads(hits.read_text()) if hits.exists() else []
+        if sorted(result['records_visited'])!=adapter['changed_records']:result['status']='unresolved'
     return result
