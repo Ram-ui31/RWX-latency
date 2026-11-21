@@ -145,6 +145,7 @@ def main():
     ap.add_argument("--warm-fork", action="store_true")
     ap.add_argument("--cheap-modules", action="store_true")
     ap.add_argument("--cost-profile", type=Path)
+    ap.add_argument("--selection-report", type=Path)
     a = ap.parse_args()
     tests, ids, ds = load_catalog(a.data / "tests.json")
     before = resource.getrusage(resource.RUSAGE_CHILDREN)
@@ -171,6 +172,11 @@ def main():
             raise ValueError("warm parent contains application code")
     rows = list(map(json.loads, a.upstream.read_text().splitlines()))
     report = []
+    selection_report = (
+        json.loads(a.selection_report.read_text())["patches"]
+        if a.selection_report
+        else {}
+    )
     profile = None
     if a.cost_profile:
         from research.observations.capsule_env import fingerprint
@@ -183,6 +189,8 @@ def main():
         ):
             raise ValueError("group calibration mismatch")
     for row in rows:
+        if selection_report.get(row["commit"], {}).get("import_hazard"):
+            continue
         selected = set(sum(row["workers"], []))
         if a.minimal:
             from blast.patches import parse_patch

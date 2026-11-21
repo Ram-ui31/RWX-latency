@@ -99,6 +99,8 @@ class Observations:
         self.guarded = set(index.unobserved)
 
     def select(self, text, comments=True, operands=True):
+        if self.contracts:
+            self.contracts.import_hazard = False
         changes = parse_patch(text)
         blocks = re.split(r'(?m)(?=^diff --git )', text)
         blocks = [b for b in blocks if b.strip()]
@@ -143,6 +145,8 @@ class Observations:
 
     def narrow_arguments(self, text, selected):
         narrowed = self.contracts.narrow(text, selected)
+        if narrowed > selected:
+            return narrowed
         if narrowed == selected:
             return selected
         # Typed value observations do not replace source/code/resource observers.

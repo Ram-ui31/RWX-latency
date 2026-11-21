@@ -11,7 +11,7 @@ COPY research/tail_verifier/ /app/research/tail_verifier/
 COPY research/observations/ /app/research/observations/
 COPY research/typed_settings/ /app/research/typed_settings/
 COPY research/group_verifier/ /app/research/group_verifier/
-COPY research/state_diff/choose.py research/state_diff/eligibility.py research/state_diff/compile_metadata.py /app/research/state_diff/
+COPY research/state_diff/choose.py research/state_diff/compile_metadata.py /app/research/state_diff/
 COPY selector.py run_candidate.py build-catalog.json /app/
 COPY maps/source-index.json.gz /app/maps/source-index.json.gz
 COPY tools/check_native.py /app/tools/check_native.py

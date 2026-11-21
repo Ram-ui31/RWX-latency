@@ -20,7 +20,7 @@ def main():
   if observations:
    if os.environ.get('RWX_GROUP_VERIFY')=='1':
     try:
-     run([ROOT/'research/group_verifier/run.py','--source',source,'--data',data,'--upstream',upstream,'--output',final,'--report',folder/'groups.json','--minimal','--cheap-modules','--seconds-factor','0.1','--budget','20',*(['--cost-profile',ROOT/'assets/group-costs.json'] if os.environ.get('RWX_GROUP_PROFILE','1')=='1' and (ROOT/'assets/group-costs.json').is_file() else [])])
+     run([ROOT/'research/group_verifier/run.py','--source',source,'--data',data,'--upstream',upstream,'--output',final,'--report',folder/'groups.json','--selection-report',folder/'tail.json','--minimal','--cheap-modules','--seconds-factor','0.1','--budget','20',*(['--cost-profile',ROOT/'assets/group-costs.json'] if os.environ.get('RWX_GROUP_PROFILE','1')=='1' and (ROOT/'assets/group-costs.json').is_file() else [])])
     except (RuntimeError,OSError):final=upstream
    else:final=upstream
    sys.stdout.write(final.read_text());sys.stdout.flush();return

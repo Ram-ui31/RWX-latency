@@ -40,6 +40,11 @@ jobs:
           timeout 170 docker run --rm --network none --cpus 2 --memory 4g --pids-limit 256 --read-only --tmpfs /tmp:rw,size=64m -v /tmp/rwx-smoke:/data:ro rwx-checkpoint > smoke-output.jsonl 2> smoke-stderr.log
           python3 -c "import json; r=json.loads(open('smoke-output.jsonl').read()); assert set(r)=={'commit','workers'} and r['commit']=='smoke'; assert len(r['workers'])<=8; ns=[n for w in r['workers'] for n in w]; assert len(ns)==len(set(ns)) and all(type(n) is int and 0<=n<1620 for n in ns)"
           if grep -E 'Traceback|Experimental candidate failed' smoke-stderr.log; then exit 1; fi
+      - name: Export pinned baseline observation artifacts
+        run: |
+          artifact_container=$(docker create rwx-checkpoint)
+          docker cp "$artifact_container:/app/assets" native-baseline-assets
+          docker rm "$artifact_container"
       - name: Measure three public runs on native Linux
         run: python3 tools/native_benchmark.py
       - name: Compare verification cost policies
@@ -52,6 +57,12 @@ jobs:
       - name: Measure argument checks with independent native labels
         if: github.event_name == 'workflow_dispatch' && inputs.wide_checks
         run: python3 tools/native_benchmark.py --data argument-holdout --output native-argument-results.json
+      - name: Independently label composed-schema and import checks
+        if: github.event_name == 'workflow_dispatch' && inputs.wide_checks
+        run: python3 tools/argument_holdout.py --native --composed --output composed-holdout
+      - name: Measure composed-schema checks with independent native labels
+        if: github.event_name == 'workflow_dispatch' && inputs.wide_checks
+        run: python3 tools/native_benchmark.py --data composed-holdout --output native-composed-results.json
       - name: Retain build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -67,3 +78,7 @@ jobs:
             argument-holdout/answers.json
             argument-holdout/manifest.json
             argument-holdout/*.log
+            composed-holdout/answers.json
+            composed-holdout/manifest.json
+            composed-holdout/*.log
+            native-baseline-assets/

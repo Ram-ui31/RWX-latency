@@ -9,12 +9,12 @@ The current candidate compiles argument-field dependencies through inheritance a
 | Evaluation | Scheduled seconds | Selector CPU seconds | Total seconds | Missed patches |
 |---|---:|---:|---:|---:|
 | Latest user-reported organizer result, older submitted candidate | 280.548 | 8.990 median | 289.538 median | 0 |
-| Public, native amd64, compiled contracts (`a4f7ca9`) | 106.577 | 18.519 median | 125.096 median | 0 |
-| Twelve additional argument checks, local integrated calibrated candidate | 59.140 | 3.534 | 62.674 | 0 |
+| Public, native amd64, preceding contracts (`c919952`) | 109.440 | 15.645 median | 125.085 median | 0 |
+| Twelve additional argument checks, local integrated calibrated candidate | 60.196 | 6.605 | 66.801 | 0 |
 
 Public native figures are medians of three actual offline containers. The twelve additional cases were frozen before labeling and independently ran all 1,620 original tests per case. Six patches caused 59 failing whole-test instances; all were retained. They cover one change family and do not establish hidden-distribution accuracy.
 
-The latest measured-CPU policy and independent native mutation labels are being evaluated on branch `rwx-native-evaluation-20261121`, commit `acc46ab`. Its workflow artifacts are authoritative for those measurements. No new organizer score is available. A private score below 150 seconds and a top-three finish remain unverified.
+The current revision additionally handles composed argument dictionaries and protects import-time validation. Four new cases measured 55.651 scheduled seconds plus 1.335 local CPU seconds, with zero misses. One case exposed 162 omitted import-related failures in the older broad map; the corrected model widens safely. The updated revision is being validated on branch `rwx-native-evaluation-20261121`. The preceding `c919952` native figures above are historical, not validation of that final correction. Its workflow artifacts are authoritative for those measurements. No new organizer score is available. A private score below 150 seconds and a top-three finish remain unverified.
 
 See [the current proposal and risk analysis](ARGUMENT_CONTRACTS.md) for the architecture, evidence, dead ends, research sources and conditional private-score calculation. Earlier development records are retained in [DISTRIBUTION_AUDIT.md](DISTRIBUTION_AUDIT.md), [CPU_TRADEOFF.md](CPU_TRADEOFF.md), [OBSERVATIONS.md](OBSERVATIONS.md) and [the public repository review](PUBLIC_REPOS_AND_NEXT_STEPS.md). Their earlier measurements are historical.
 

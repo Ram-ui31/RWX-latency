@@ -34,15 +34,22 @@ CASES = [
     ("core-alias", "core.py", "Alias", "alias"),
 ]
 
+COMPOSED_CASES = [
+    ("query-select-composed", "query.py", "Select", "expressions"),
+    ("query-subquery-composed", "query.py", "Subquery", "alias"),
+    ("function-trycast-composed", "functions.py", "TryCast", "requires_string"),
+    ("string-concatws-composed", "string.py", "ConcatWs", "flatten"),
+]
 
-def generate(output):
+
+def generate(output, cases=CASES):
     output.mkdir(parents=True, exist_ok=True)
     (output / "commits").mkdir(exist_ok=True)
     shutil.copyfile(ROOT / "build-catalog.json", output / "tests.json")
     index = json.loads(
         gzip.decompress((ROOT / "maps/source-index.json.gz").read_bytes())
     )
-    for name, filename, cls, field in CASES:
+    for name, filename, cls, field in cases:
         path = "sqlglot/expressions/" + filename
         old = index["files"][path]["source"]
         owner = next(
@@ -87,7 +94,7 @@ def generate(output):
             )
         )
         (output / "commits" / (name + ".patch")).write_text(patch)
-    (output / "manifest.json").write_text(json.dumps(CASES, indent=2))
+    (output / "manifest.json").write_text(json.dumps(cases, indent=2))
 
 
 def label_one(source, catalog, patch):
@@ -105,7 +112,14 @@ def label_one(source, catalog, patch):
             ),
         )
         evidence = tree.path.parent / "gold.json"
-        (tree.path.parent / "rwx_gold.py").write_text(PLUGIN)
+        plugin = PLUGIN.replace("reports=[]", "reports=[]\ncollection=[]").replace(
+            "reports=reports)", "reports=reports,collection=collection)"
+        )
+        plugin += """
+def pytest_collectreport(report):
+    if report.failed: collection.append(report.nodeid)
+"""
+        (tree.path.parent / "rwx_gold.py").write_text(plugin)
         env = dict(
             os.environ,
             PYTHONPATH=str(tree.path.parent) + os.pathsep + str(tree.path),
@@ -128,7 +142,9 @@ def label_one(source, catalog, patch):
                 "-p",
                 "no:cacheprovider",
                 "-q",
-                *ids,
+                "--tb=no",
+                "--continue-on-collection-errors",
+                *sorted({t["file"] for t in tests}),
             ],
             cwd=tree.path,
             env=env,
@@ -136,18 +152,41 @@ def label_one(source, catalog, patch):
             stderr=sys.stderr,
             timeout=200,
         )
-        reports = json.loads(evidence.read_text())["reports"]
-        calls = {
-            r["nodeid"] for r in reports if r["when"] == "call" and r["nodeid"] in ids
-        }
-        failed = {
-            ids[r["nodeid"]]
+        evidence_data = json.loads(evidence.read_text())
+        return reference_outcomes(evidence_data, ids, result.returncode)
+
+
+def reference_outcomes(evidence_data, ids, returncode):
+    reports = evidence_data["reports"]
+    calls = {r["nodeid"] for r in reports if r["when"] == "call" and r["nodeid"] in ids}
+    failed = {
+        ids[r["nodeid"]]
+        for r in reports
+        if r["outcome"] == "failed" and r["nodeid"] in ids
+    }
+    imported_failures = {
+        node
+        for node in ids
+        for collector in evidence_data.get("collection", [])
+        if node == collector or node.startswith(collector + "::")
+    }
+    failed.update(ids[node] for node in imported_failures)
+    accounted = (
+        calls
+        | imported_failures
+        | {
+            r["nodeid"]
             for r in reports
-            if r["outcome"] == "failed" and r["nodeid"] in ids
+            if r["nodeid"] in ids and r["outcome"] in ("failed", "skipped")
         }
-        if result.returncode not in (0, 1) or len(calls) != len(ids):
-            raise ValueError("incomplete independent whole-suite reference")
-        return dict(failing=sorted(failed), whole_tests=len(calls))
+    )
+    if returncode not in (0, 1) or len(accounted) != len(ids):
+        raise ValueError("incomplete independent whole-suite reference")
+    return dict(
+        failing=sorted(failed),
+        whole_tests=len(accounted),
+        collection_failures=len(imported_failures),
+    )
 
 
 def main():
@@ -155,6 +194,7 @@ def main():
     parser.add_argument("--output", type=Path, default=Path("argument-holdout"))
     parser.add_argument("--native", action="store_true")
     parser.add_argument("--image", default="rwx-checkpoint")
+    parser.add_argument("--composed", action="store_true")
     parser.add_argument("--label-one", type=Path)
     parser.add_argument("--source", type=Path)
     parser.add_argument("--catalog", type=Path)
@@ -162,7 +202,8 @@ def main():
     if args.label_one:
         print(json.dumps(label_one(args.source, args.catalog, args.label_one)))
         return
-    generate(args.output)
+    cases = COMPOSED_CASES if args.composed else CASES
+    generate(args.output, cases)
     if args.native:
         output = args.output.resolve()
         answers = {}
@@ -209,7 +250,7 @@ def main():
             return json.loads(proc.stdout)
 
         with ThreadPoolExecutor(max_workers=2) as pool:
-            pending = {pool.submit(label, case[0]): case[0] for case in CASES}
+            pending = {pool.submit(label, case[0]): case[0] for case in cases}
             for future in as_completed(pending):
                 name = pending[future]
                 answers[name] = future.result()

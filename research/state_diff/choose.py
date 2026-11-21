@@ -12,57 +12,62 @@ from pathlib import Path
 
 from blast.patches import apply_change, parse_patch
 from research.observations.capsule_env import fingerprint
-from research.state_diff.eligibility import literal_assignment
 
 
 def boolean_edit(old, new):
-    key = literal_assignment(old, new)
-    if key is None or not key.endswith(".arg_types"):
-        return None
-
-    def value(text):
-        node = ast.parse(text)
-        for owner in key.split(".")[:-1]:
-            node = next(
-                n for n in node.body if isinstance(n, ast.ClassDef) and n.name == owner
-            )
-        assignment = next(
-            n
-            for n in node.body
-            if isinstance(n, ast.Assign)
-            and any(isinstance(t, ast.Name) and t.id == "arg_types" for t in n.targets)
-        )
-        return ast.literal_eval(assignment.value), assignment.value
-
-    (before, literal), (after, _) = value(old), value(new)
-    if not (
-        type(before) is dict
-        and type(after) is dict
-        and list(before) == list(after)
-        and all(type(k) is str for k in before)
-        and all(type(v) is bool for v in (*before.values(), *after.values()))
-    ):
-        return None
-    fields = [k for k in before if before[k] != after[k]]
-    if len(fields) != 1:
-        return None
-    node = next(
-        v
-        for k, v in zip(literal.keys, literal.values)
-        if isinstance(k, ast.Constant) and k.value == fields[0]
-    )
-    if not isinstance(node, ast.Constant) or node.lineno != node.end_lineno:
-        return None
-    # AST equivalence alone overlooks source/line-table observers. Accept only
-    # the exact Boolean token replacement, preserving every other source byte.
+    """Recognize one direct Boolean field, including validated composed maps."""
     lines = old.encode().splitlines(keepends=True)
-    line = lines[node.lineno - 1]
-    lines[node.lineno - 1] = (
-        line[: node.col_offset]
-        + str(after[fields[0]]).encode()
-        + line[node.end_col_offset :]
-    )
-    return (key, fields) if b"".join(lines) == new.encode() else None
+    new_lines = new.encode().splitlines(keepends=True)
+    if len(lines) != len(new_lines):
+        return None
+    changed = [i for i, (a, b) in enumerate(zip(lines, new_lines)) if a != b]
+    if len(changed) != 1:
+        return None
+    position = changed[0]
+    matches = []
+
+    def walk(node, owners=()):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.ClassDef):
+                walk(child, (*owners, child.name))
+            elif isinstance(child, (ast.Assign, ast.AnnAssign)) and owners:
+                targets = (
+                    child.targets if isinstance(child, ast.Assign) else [child.target]
+                )
+                if (
+                    len(targets) != 1
+                    or not isinstance(targets[0], ast.Name)
+                    or targets[0].id != "arg_types"
+                    or not isinstance(child.value, ast.Dict)
+                ):
+                    continue
+                for key, value in zip(child.value.keys, child.value.values):
+                    if not (
+                        isinstance(key, ast.Constant)
+                        and type(key.value) is str
+                        and isinstance(value, ast.Constant)
+                        and type(value.value) is bool
+                        and value.lineno == value.end_lineno
+                        and value.lineno - 1 == position
+                    ):
+                        continue
+                    line = lines[position]
+                    edited = (
+                        line[: value.col_offset]
+                        + str(not value.value).encode()
+                        + line[value.end_col_offset :]
+                    )
+                    if edited == new_lines[position]:
+                        matches.append((".".join((*owners, "arg_types")), [key.value]))
+            elif not isinstance(
+                child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+            ):
+                walk(child, owners)
+
+    walk(ast.parse(old))
+    # Source equality is stronger than AST equality: no other byte may change.
+    # The compiled graph separately proves all unpack/copy/inheritance origins.
+    return matches[0] if len(matches) == 1 else None
 
 
 class ArgumentContracts:
@@ -89,6 +94,7 @@ class ArgumentContracts:
         self.passed = index.map_ids(self.readers["passed"])
 
     def narrow(self, text, selected):
+        self.import_hazard = False
         edits = parse_patch(text)
         if len(edits) != 1:
             return selected
@@ -115,10 +121,21 @@ class ArgumentContracts:
         )
         consumers = self.readers["consumers"]
         for arguments, required, field in edges:
+            roles = (":raw", ":unknown", ":required_missing", ":missing:" + field)
+            # Validation can run while importing an application module (for
+            # example, parsing a template stored in a generator class). A
+            # changed result can break imports or derived globals outside the
+            # argument graph. No runtime-only reader set certifies that away.
+            shared = self.readers.get("shared", [])
+            if arguments + ":values" in shared or any(
+                required + role in shared for role in roles
+            ):
+                self.import_hazard = True
+                return set(self.index.all)
             # Key-only reads cannot observe a Boolean change. Application import
             # reads are represented by the compiled inheritance/dict-copy edges.
             nodes = set(consumers.get(arguments + ":values", []))
-            for role in (":raw", ":unknown", ":required_missing", ":missing:" + field):
+            for role in roles:
                 nodes.update(consumers.get(required + role, []))
             retained.update(self.index.map_ids(nodes) & selected)
             for item in (arguments, required):

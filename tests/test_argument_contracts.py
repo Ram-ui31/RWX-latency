@@ -25,6 +25,19 @@ class ContractTests(unittest.TestCase):
         ):
             self.assertIsNone(boolean_edit(OLD, text))
 
+    def test_composed_schema_requires_an_exact_direct_boolean_edit(self):
+        before = 'class A:\n    arg_types = {**Base.arg_types, "field": False}\n'
+        after = before.replace('"field": False', '"field": True')
+        self.assertEqual(boolean_edit(before, after), ("A.arg_types", ["field"]))
+        self.assertIsNone(boolean_edit(before, after.replace("Base", "Other")))
+        self.assertIsNone(boolean_edit(before, after + "# extra\n"))
+
+    def test_computed_values_and_function_local_classes_are_not_supported(self):
+        before = 'class A:\n    arg_types = {"field": bool(False)}\n'
+        self.assertIsNone(boolean_edit(before, before.replace("False", "True")))
+        before = 'def make():\n    class A:\n        arg_types = {"field": False}\n'
+        self.assertIsNone(boolean_edit(before, before.replace("False", "True")))
+
     def contract(self):
         x = ArgumentContracts.__new__(ArgumentContracts)
         source_hash = hashlib.sha256(OLD.encode()).hexdigest()
@@ -52,6 +65,7 @@ class ContractTests(unittest.TestCase):
                 "reads": {"sqlglot/a.py": [8]},
             },
             unobserved={9},
+            all=set(range(12)),
             map_ids=set,
             file_consumers=lambda _: {10},
         )
@@ -81,6 +95,11 @@ class ContractTests(unittest.TestCase):
         x.readers["test_shared"][REQUIRED] = ["tests/shared.py"]
         self.assertIn(10, x.narrow(self.patch(), set(range(12))))
 
+    def test_application_import_validation_vetoes_runtime_only_narrowing(self):
+        x = self.contract()
+        x.readers["shared"] = [REQUIRED + ":missing:optional"]
+        self.assertEqual(x.narrow(self.patch(), {2, 3, 4}), set(range(12)))
+
     def test_missing_propagation_or_source_mismatch_retains_everything(self):
         for mode in ("edges", "source"):
             x = self.contract()
@@ -106,6 +125,12 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(
             x.narrow_arguments(self.patch(), set(range(12))), set(range(12))
         )
+
+    def test_import_hazard_widening_cannot_be_undone_by_metadata_guard(self):
+        x = self.observation_guard()
+        x.map["shared_metadata"] = ["sqlglot/a.py#A"]
+        x.contracts = SimpleNamespace(narrow=lambda text, selected: set(range(12)))
+        self.assertEqual(x.narrow_arguments(self.patch(), {2, 3, 4}), set(range(12)))
 
 
 if __name__ == "__main__":

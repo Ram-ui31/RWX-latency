@@ -52,7 +52,8 @@ def main():
     for e in parse_patch(text):selected.update(ipc.get(e.old_path,[]))
   except (ValueError,SyntaxError,OSError):
    selected,reason=set(ds),'unsupported_patch'
-  texts[patch.stem]=text;rows[patch.stem]={'initial':sorted(selected),'selected':set(selected),'reason':reason,'actions':[],'tried':set()}
+  hazard=bool(observer and observer.contracts and observer.contracts.import_hazard)
+  texts[patch.stem]=text;rows[patch.stem]={'initial':sorted(selected),'selected':set(selected),'reason':reason,'import_hazard':hazard,'actions':[],'tried':set(selected) if hazard else set()}
  actions=0
  cost_data={}
  cost_profile_status='missing'
