@@ -14,9 +14,15 @@ def main():
  with tempfile.TemporaryDirectory(prefix='rwx-batch-') as folder:
   folder=Path(folder);upstream=folder/'upstream.jsonl';final=folder/'final.jsonl'
   observations=os.environ.get('RWX_OBSERVATIONS')
-  run([ROOT/'research/tail_verifier/evaluate.py','--source',source,'--data',data,'--cost-profile',ROOT/'assets/verification-costs.json','--report',folder/'tail.json','--predictions',upstream,'--max-actions','5','--min-saving','2','--cpu-budget','20','--action-timeout','8','--wall-budget','45',*(['--observations',observations] if observations else [])])
+  settings=os.environ.get('RWX_TYPED_SETTINGS')
+  run([ROOT/'research/tail_verifier/evaluate.py','--source',source,'--data',data,'--cost-profile',ROOT/'assets/verification-costs.json','--report',folder/'tail.json','--predictions',upstream,'--max-actions','5','--min-saving','2','--cpu-budget','20','--action-timeout','8','--wall-budget','45',*(['--observations',observations] if observations else []),*(['--settings',settings] if settings else [])])
   if observations:
-   sys.stdout.write(upstream.read_text());sys.stdout.flush();return
+   if os.environ.get('RWX_GROUP_VERIFY')=='1':
+    try:
+     run([ROOT/'research/group_verifier/run.py','--source',source,'--data',data,'--upstream',upstream,'--output',final,'--report',folder/'groups.json','--minimal','--cheap-modules','--seconds-factor','0.1','--budget','20'])
+    except (RuntimeError,OSError):final=upstream
+   else:final=upstream
+   sys.stdout.write(final.read_text());sys.stdout.flush();return
   try:
    run([ROOT/'research/incremental_executor/compose.py','--source',source,'--capsule',ROOT/'assets/checkpoints.pkl.gz','--data',data,'--upstream',upstream,'--output',final,'--report',folder/'checkpoint.json','--wall-budget','95'])
   except (RuntimeError,OSError):final=upstream

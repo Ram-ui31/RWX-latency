@@ -1,9 +1,30 @@
+# Current CPU-budget candidate
+
+The default entrypoint adds budgeted verification of supported original unittest
+groups. Public median selector CPU rose from about 5.02 to 11.38 seconds,
+scheduled time fell from 125.574 to 113.110 seconds, and median total fell from
+130.591 to 124.495 seconds, with zero public misses.
+
+[CPU_TRADEOFF.md](CPU_TRADEOFF.md) records the measurements, rejected variants and
+limits. Native Linux and organizer results are pending. Earlier candidate notes follow.
+
+# Current candidate
+
+The default build now adds task-aware receiver-qualified scalar settings evidence.
+Its local public median is 130.591 seconds with zero misses. On three fresh settings
+mutations, its median total is 15.663 seconds versus 30.959 for the prior candidate,
+with zero misses. The latest organizer measurement remains 289 seconds for the
+prior candidate. Native Linux and organizer validation of this revision are pending.
+
+[DISTRIBUTION_AUDIT.md](DISTRIBUTION_AUDIT.md) explains the transfer gap, the
+reused-worker attribution error, the implementation and its limits. Earlier notes follow.
+
 # RWX Blast Radius
 
 The default Dockerfile now builds the baseline observation candidate described in
 [OBSERVATIONS.md](OBSERVATIONS.md). Its measured public median is 140.429 seconds
 including local CPU with zero misses. The previous entrypoint measured 210.415
-seconds on the same machine. Linux amd64 and hidden-batch results remain pending.
+seconds on the same machine. The user reports 289 seconds on the organizer batch, versus 304 previously. See [the next-step plan](PUBLIC_REPOS_AND_NEXT_STEPS.md) for the revised target and public-entry review.
 
 The build runs the pinned baseline tests to collect operand relations and source
 metadata readers. Runtime selection combines those observations with the existing

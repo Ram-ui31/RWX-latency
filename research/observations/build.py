@@ -70,7 +70,7 @@ def build(source, catalog, output):
             ipc = consumers(json.load(f), tests)
         ipc_ids = {p: [tests[i]['id'] for i in numbers] for p, numbers in ipc.items()}
         from capsule_env import fingerprint
-        payload = dict(version=2, ipc=ipc_ids, source_index_sha256=hashlib.sha256(index_path.read_bytes()).hexdigest(), environment=fingerprint(), passed=sorted(passed),
+        payload = dict(version=2, per_task_ownership=True, ipc=ipc_ids, source_index_sha256=hashlib.sha256(index_path.read_bytes()).hexdigest(), environment=fingerprint(), passed=sorted(passed),
                        metadata=metadata, shared_metadata=[k[1:] for k in common if k.startswith('@')], sites=sites,
                        source={p.relative_to(source).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
                                for p in (source/'sqlglot').rglob('*.py')})

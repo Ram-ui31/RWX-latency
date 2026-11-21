@@ -1,6 +1,6 @@
 # Baseline observations for the next RWX run
 
-The next candidate targets approximately 203 seconds on the batch where the prior entry scored 304 seconds. The measured local public improvement is 33.26 percent. The hidden batch has yet to be measured.
+The user reports an organizer result of 289 seconds, improved from 304 seconds by 4.93 percent. The measured local public improvement was 33.26 percent. The earlier approximate 203-second organizer projection did not transfer. PUBLIC_REPOS_AND_NEXT_STEPS.md records the revised plan.
 
 ## Why the prior approach plateaued
 
@@ -53,7 +53,7 @@ Both entrypoints used the same public 30-patch sample, interpreter, machine, cat
 | Earlier checkpoint entrypoint | 193.138 | 17.276888, 17.531569, 17.130825 | 210.414888 |
 | Baseline observations | 136.028 | 4.413475, 4.401134, 4.358928 | 140.429386 |
 
-The reduction is 69.985754 seconds, or 33.26 percent. Applying that ratio to 304 gives approximately 202.89 seconds. This is a scenario estimate. Hidden-patch composition and Linux timings can change the reduction.
+The reduction is 69.985754 seconds, or 33.26 percent. Applying that ratio to 304 gives approximately 202.89 seconds. This historical scenario estimate has been superseded by the reported organizer result of 289 seconds.
 
 An ablation using simulated time alone measured 234.350 seconds with per-file composition, 205.003 seconds after adding guarded comments, and 157.930 seconds after adding operand observations. All three had zero public misses. Economical original-test verification reduced the final simulated time to 136.028 seconds.
 

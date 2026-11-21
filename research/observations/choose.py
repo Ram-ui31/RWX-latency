@@ -78,10 +78,14 @@ def observed_artifacts(old, new, path):
 
 
 class Observations:
-    def __init__(self, path, index):
+    def __init__(self, path, index, settings=None, tests=None):
         self.map = json.loads(gzip.decompress(Path(path).read_bytes()))
         if self.map['version'] != 2 or self.map['environment'] != fingerprint():
             raise ValueError('baseline observation environment mismatch')
+        self.settings = None
+        if settings is not None:
+            from research.typed_settings.choose import Settings
+            self.settings = Settings(settings, index, tests)
         self.index = index
         index_path = HERE.parents[1]/'maps/source-index.json.gz'
         if hashlib.sha256(index_path.read_bytes()).hexdigest() != self.map['source_index_sha256']:
@@ -129,7 +133,7 @@ class Observations:
                         if node in self.index.ids and mask and not (mask & ~site[1])}
                 ordinary = (ordinary - safe) | guard
             selected.update(ordinary)
-        return selected
+        return self.settings.narrow(text, selected) if self.settings else selected
 
     def original(self, text, changes):
         selected, _ = adaptive_select(self.index, text)

@@ -22,7 +22,7 @@ jobs:
       - name: Inspect built candidate
         run: |
           docker image inspect rwx-checkpoint --format '{{.Architecture}}'
-          docker run --rm --network none --cpus 2 --memory 4g --pids-limit 256 --read-only --tmpfs /tmp:rw,size=64m --entrypoint python3 rwx-checkpoint -c "import pathlib,json; p=pathlib.Path('/app/assets/observations.json.gz'); assert p.is_file(); import gzip; m=json.loads(gzip.decompress(p.read_bytes())); assert m['version']==2 and len(m['passed'])>=1500; print('Baseline observations built and runtime assets present')"
+          docker run --rm --network none --cpus 2 --memory 4g --pids-limit 256 --read-only --tmpfs /tmp:rw,size=64m --entrypoint python3 rwx-checkpoint -c "import pathlib,json; p=pathlib.Path('/app/assets/observations.json.gz'); assert p.is_file(); import gzip; m=json.loads(gzip.decompress(p.read_bytes())); assert m['version'] in (2,3) and m['per_task_ownership'] and len(m['passed'])>=1500; s=json.loads(gzip.decompress(pathlib.Path('/app/assets/settings.json.gz').read_bytes())); assert s['task_attribution'] and s['version'] in (2,3); print('Task-attributed observations and settings built')"
       - name: Smoke test the actual entrypoint offline
         shell: bash
         run: |
@@ -33,6 +33,8 @@ jobs:
           timeout 170 docker run --rm --network none --cpus 2 --memory 4g --pids-limit 256 --read-only --tmpfs /tmp:rw,size=64m -v /tmp/rwx-smoke:/data:ro rwx-checkpoint > smoke-output.jsonl 2> smoke-stderr.log
           python3 -c "import json; r=json.loads(open('smoke-output.jsonl').read()); assert set(r)=={'commit','workers'} and r['commit']=='smoke'; assert len(r['workers'])<=8; ns=[n for w in r['workers'] for n in w]; assert len(ns)==len(set(ns)) and all(type(n) is int and 0<=n<1620 for n in ns)"
           if grep -E 'Traceback|Experimental candidate failed' smoke-stderr.log; then exit 1; fi
+      - name: Measure three public runs on native Linux
+        run: python3 tools/native_benchmark.py
       - name: Retain build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -42,3 +44,6 @@ jobs:
             build.log
             smoke-output.jsonl
             smoke-stderr.log
+            native-public-results.json
+            native-public-*.jsonl
+            native-public-*.log

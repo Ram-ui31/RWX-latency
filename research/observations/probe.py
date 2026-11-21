@@ -162,3 +162,13 @@ def install(source):
     builtins._rwx_observe_order = observe_order
     builtins._rwx_observe_identity = observe
     base.get_code = get_code
+
+
+def task(node, function, args, kwargs):
+    global active
+    previous = active
+    active = node
+    try:
+        return function(*args, **kwargs)
+    finally:
+        active = previous

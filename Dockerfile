@@ -9,6 +9,8 @@ COPY blast/ /app/blast/
 COPY engine/ /app/engine/
 COPY research/tail_verifier/ /app/research/tail_verifier/
 COPY research/observations/ /app/research/observations/
+COPY research/typed_settings/ /app/research/typed_settings/
+COPY research/group_verifier/ /app/research/group_verifier/
 COPY selector.py run_candidate.py build-catalog.json /app/
 COPY maps/source-index.json.gz /app/maps/source-index.json.gz
 COPY tools/check_native.py /app/tools/check_native.py
@@ -16,6 +18,9 @@ RUN python -X faulthandler /app/tools/check_native.py
 ENV RWX_OBSERVATIONS=/app/assets/observations.json.gz
 RUN mkdir /app/assets && python /app/research/observations/build.py --source /app/pinned-source --catalog /app/build-catalog.json --output ${RWX_OBSERVATIONS}
 RUN python /app/research/tail_verifier/calibrate.py --source /app/pinned-source --catalog /app/build-catalog.json --numbers 1224 --output /app/assets/verification-costs.json --timeout 60
+ENV RWX_GROUP_VERIFY=1
+ENV RWX_TYPED_SETTINGS=/app/assets/settings.json.gz
+RUN python /app/research/typed_settings/build.py --source /app/pinned-source --catalog /app/build-catalog.json --output ${RWX_TYPED_SETTINGS}
 RUN chmod -R a+rX /app
 USER 65534:65534
 ENTRYPOINT ["python3", "-B", "/app/run_candidate.py"]
