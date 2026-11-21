@@ -29,6 +29,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", default="rwx-checkpoint")
     parser.add_argument("--group-verify", choices=("0", "1"))
+    parser.add_argument("--native-memo", choices=("0", "1"))
     parser.add_argument("--group-profile", choices=("0", "1"))
     parser.add_argument("--data", type=Path)
     parser.add_argument(
@@ -63,6 +64,7 @@ def main():
         for key, value in (
             ("RWX_GROUP_VERIFY", args.group_verify),
             ("RWX_GROUP_PROFILE", args.group_profile),
+            ("RWX_NATIVE_MEMO_ENABLE", args.native_memo),
         ):
             if value is not None:
                 env.extend(["-e", key + "=" + value])

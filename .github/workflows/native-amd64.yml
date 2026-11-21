@@ -51,12 +51,15 @@ jobs:
         run: |
           python3 tools/native_benchmark.py --group-verify 0 --output native-no-groups-results.json
           python3 tools/native_benchmark.py --group-profile 0 --output native-old-cost-results.json
+          python3 tools/native_benchmark.py --native-memo 0 --output native-no-memo-results.json
       - name: Independently label twelve argument-contract checks
         if: github.event_name == 'workflow_dispatch' && inputs.wide_checks
         run: python3 tools/argument_holdout.py --native
       - name: Measure argument checks with independent native labels
         if: github.event_name == 'workflow_dispatch' && inputs.wide_checks
-        run: python3 tools/native_benchmark.py --data argument-holdout --output native-argument-results.json
+        run: |
+          python3 tools/native_benchmark.py --data argument-holdout --output native-argument-results.json
+          python3 tools/native_benchmark.py --native-memo 0 --data argument-holdout --output native-argument-no-memo-results.json
       - name: Independently label composed-schema and import checks
         if: github.event_name == 'workflow_dispatch' && inputs.wide_checks
         run: python3 tools/argument_holdout.py --native --composed --output composed-holdout

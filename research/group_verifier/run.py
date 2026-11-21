@@ -140,6 +140,7 @@ def main():
     for k in ("source", "data", "upstream", "output", "report"):
         ap.add_argument("--" + k, type=Path, required=True)
     ap.add_argument("--budget", type=float, default=30)
+    ap.add_argument("--wall-budget", type=float, default=100)
     ap.add_argument("--seconds-factor", type=float, default=1.5)
     ap.add_argument("--minimal", action="store_true")
     ap.add_argument("--warm-fork", action="store_true")
@@ -230,7 +231,7 @@ def main():
         if (
             gain <= estimate
             or cpu() + estimate > a.budget
-            or time.monotonic() - wall > 100
+            or time.monotonic() - wall >= a.wall_budget
         ):
             continue
         tick = cpu()
@@ -239,7 +240,11 @@ def main():
                 a.source,
                 (a.data / "commits" / f"{row['commit']}.patch").read_text(),
                 [tests[i]["id"] for i in sorted(candidates)],
-                min(8, max(0.1, a.budget - cpu())),
+                min(
+                    8,
+                    max(0.1, a.budget - cpu()),
+                    max(0.01, a.wall_budget - (time.monotonic() - wall)),
+                ),
                 minimal=a.minimal,
                 warm=a.warm_fork,
             )
