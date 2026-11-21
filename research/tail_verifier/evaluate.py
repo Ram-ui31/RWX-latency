@@ -26,7 +26,7 @@ def best_action(selected,durations,excluded):
     return max(actions,default=(0,None))
 
 def main():
- ap=argparse.ArgumentParser();ap.add_argument('--source',type=Path,required=True);ap.add_argument('--data',type=Path,required=True);ap.add_argument('--report',type=Path,required=True);ap.add_argument('--predictions',type=Path,required=True);ap.add_argument('--wall-budget',type=float,default=45);ap.add_argument('--cpu-budget',type=float,default=60);ap.add_argument('--action-timeout',type=float,default=8);ap.add_argument('--min-saving',type=float,default=5);ap.add_argument('--max-actions',type=int,default=5);ap.add_argument('--cost-profile',type=Path);ap.add_argument('--observations',type=Path);ap.add_argument('--settings',type=Path);ap.add_argument('--allow-uncalibrated-experiment',action='store_true');a=ap.parse_args()
+ ap=argparse.ArgumentParser();ap.add_argument('--source',type=Path,required=True);ap.add_argument('--data',type=Path,required=True);ap.add_argument('--report',type=Path,required=True);ap.add_argument('--predictions',type=Path,required=True);ap.add_argument('--wall-budget',type=float,default=45);ap.add_argument('--cpu-budget',type=float,default=60);ap.add_argument('--action-timeout',type=float,default=8);ap.add_argument('--min-saving',type=float,default=5);ap.add_argument('--max-actions',type=int,default=5);ap.add_argument('--cost-profile',type=Path);ap.add_argument('--observations',type=Path);ap.add_argument('--settings',type=Path);ap.add_argument('--contracts',type=Path);ap.add_argument('--allow-uncalibrated-experiment',action='store_true');a=ap.parse_args()
  if min(a.cpu_budget,a.min_saving,a.max_actions)<0 or a.action_timeout<=0:ap.error('invalid budget')
  start=time.process_time();wall=time.monotonic();usage=resource.getrusage(resource.RUSAGE_CHILDREN)
  def cpu():
@@ -38,7 +38,7 @@ def main():
  observer=None
  if a.observations:
   from research.observations.choose import Observations
-  observer=Observations(a.observations,index,a.settings,tests)
+  observer=Observations(a.observations,index,a.settings,tests,a.contracts)
  else:
   ipc=consumers(index.payload,tests)
  rows={};texts={}

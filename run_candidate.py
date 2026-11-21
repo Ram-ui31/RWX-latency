@@ -15,7 +15,8 @@ def main():
   folder=Path(folder);upstream=folder/'upstream.jsonl';final=folder/'final.jsonl'
   observations=os.environ.get('RWX_OBSERVATIONS')
   settings=os.environ.get('RWX_TYPED_SETTINGS')
-  run([ROOT/'research/tail_verifier/evaluate.py','--source',source,'--data',data,'--cost-profile',ROOT/'assets/verification-costs.json','--report',folder/'tail.json','--predictions',upstream,'--max-actions','5','--min-saving','2','--cpu-budget','20','--action-timeout','8','--wall-budget','45',*(['--observations',observations] if observations else []),*(['--settings',settings] if settings else [])])
+  contracts=os.environ.get('RWX_ARGUMENT_CONTRACTS')
+  run([ROOT/'research/tail_verifier/evaluate.py','--source',source,'--data',data,'--cost-profile',ROOT/'assets/verification-costs.json','--report',folder/'tail.json','--predictions',upstream,'--max-actions','5','--min-saving','2','--cpu-budget','20','--action-timeout','8','--wall-budget','45',*(['--observations',observations] if observations else []),*(['--settings',settings] if settings else []),*(['--contracts',contracts] if contracts else [])])
   if observations:
    if os.environ.get('RWX_GROUP_VERIFY')=='1':
     try:

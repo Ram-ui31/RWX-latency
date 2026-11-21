@@ -58,6 +58,7 @@ def main():
             and {"setup", "call", "teardown"} <= {w for w, _ in rs}
         }
         consumers = {}
+        test_shared = {}
         shared = set()
         for marker in Path(tmp).glob("start-*.json"):
             if not Path(tmp, marker.name.removeprefix("start-")).exists():
@@ -72,13 +73,18 @@ def main():
             for node, keys in json.loads(file.read_text()).items():
                 if not node:
                     shared.update(keys)
+                elif node.startswith("!sharedtest|"):
+                    for key in keys:
+                        test_shared.setdefault(key, set()).add(node.split("|", 1)[1])
                 elif node in passed:
                     for k in keys:
                         consumers.setdefault(k, set()).add(node)
         from research.observations.capsule_env import fingerprint
 
         result = dict(
-            version=3,
+            version=8,
+            validation_observations=True,
+            test_shared={k: sorted(v) for k,v in test_shared.items()},
             test_code_instrumented=True,
             task_attribution=True,
             environment=fingerprint(),

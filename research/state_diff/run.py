@@ -34,6 +34,22 @@ def refine(source, text, selected, tests, index, readers, baseline, inventory, t
     key = literal_assignment(old, apply_change(old, edit))
     if key is None:
         return selected, "literal_assignment_only"
+    if not key.endswith(".arg_types"):
+        return selected, "argument_contract_only"
+    import ast
+    def values(text):
+        tree = ast.parse(text)
+        parts = key.split(".")
+        node = tree
+        for owner_name in parts[:-1]:
+            node = next(n for n in node.body if isinstance(n, ast.ClassDef) and n.name == owner_name)
+        assignment = next(n for n in node.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "arg_types" for t in n.targets))
+        return ast.literal_eval(assignment.value)
+    before_dict, after_dict = values(old), values(apply_change(old, edit))
+    if not (type(before_dict) is dict and type(after_dict) is dict and
+            list(before_dict) == list(after_dict) and all(type(v) is bool for v in before_dict.values()) and
+            all(type(v) is bool for v in after_dict.values())):
+        return selected, "boolean_values_only"
     owner = path + "#" + key.rsplit(".", 1)[0] + "."
     if any(k.startswith(owner) for k in baseline["opaque"]):
         return selected, "opaque_owner"
@@ -59,11 +75,23 @@ def refine(source, text, selected, tests, index, readers, baseline, inventory, t
     retained.update(index.unobserved & selected)
     retained.update(index.map_ids(index.payload["reads"].get(path, [])) & selected)
     for item in changed:
+        for file in readers.get("test_shared", {}).get(item, []):
+            retained.update(index.file_consumers(file) & selected)
         attribute = item.split("#", 1)[1].rsplit(".", 1)[-1]
         # Unrecorded attribute kinds cannot justify omission.
         if not (attribute.isupper() or attribute in {"arg_types", "required_args"}):
             return selected, "untracked_derived_attribute"
-        retained.update(index.map_ids(readers["consumers"].get(item, [])) & selected)
+        dependencies = readers["consumers"]
+        relevant = set(dependencies.get(item, []))
+        if readers.get("validation_observations"):
+            if attribute == "arg_types" and baseline.get("keys", {}).get(item) == after.get("keys", {}).get(item) and item in baseline.get("keys", {}):
+                relevant = set(dependencies.get(item + ":values", []))
+            elif attribute == "required_args" and item in baseline.get("members", {}) and item in after.get("members", {}):
+                changed_arguments = set(baseline["members"][item]) ^ set(after["members"][item])
+                relevant = set(dependencies.get(item + ":raw", [])) | set(dependencies.get(item + ":unknown", [])) | set(dependencies.get(item + ":required_missing", []))
+                for argument in changed_arguments:
+                    relevant.update(dependencies.get(item + ":missing:" + argument, []))
+        retained.update(index.map_ids(relevant) & selected)
         for test in ([] if readers.get("test_code_instrumented") else tests):
             test_source = index.payload["files"].get(test["file"], {}).get("source")
             if test_source is None:

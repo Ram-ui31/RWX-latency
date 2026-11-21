@@ -9,7 +9,7 @@ source = None
 origins = {}
 
 
-def record(obj, name):
+def record(obj, name, mode="values"):
     if type(name) is not str:
         return
     if name == "__dict__":
@@ -48,14 +48,57 @@ def record(obj, name):
             if prefix:
                 node = active or os.environ.get("RWX_TYPED_NODE", "")
                 reads.setdefault(node, set()).add(prefix + name)
+                if not node:
+                    frame = sys._getframe(1)
+                    while frame is not None:
+                        filename = frame.f_code.co_filename
+                        if filename.startswith(str(source) + "/tests/"):
+                            relative = filename[len(str(source)) + 1:]
+                            reads.setdefault("!sharedtest|" + relative, set()).add(prefix + name)
+                            break
+                        if "importlib" in filename and frame.f_code.co_name in {"_find_and_load", "_call_with_frames_removed"}:
+                            break
+                        frame = frame.f_back
+                if name == "arg_types":
+                    frame = sys._getframe(2)
+                    while frame is not None:
+                        filename = frame.f_code.co_filename
+                        if filename.startswith(str(source) + "/tests/"):
+                            break
+                        if frame.f_code.co_name == "<module>" and filename.startswith(str(source) + "/sqlglot/"):
+                            mode = "initialization"
+                            break
+                        frame = frame.f_back
+                    reads[node].add(prefix + name + ":" + mode)
+                if name == "required_args":
+                    frame = sys._getframe(2)
+                    if frame.f_code.co_name == "error_messages" and frame.f_code.co_filename.endswith("/sqlglot/expressions/core.py"):
+                        args = object.__getattribute__(obj, "args")
+                        kinds = getattr(type(obj), "arg_types", {})
+                        if type(args) is dict and type(kinds) is dict:
+                            for argument in kinds:
+                                value = args.get(argument)
+                                kind = type(value)
+                                if kind not in {type(None), bool, int, float, str, bytes, list, tuple, dict, set, frozenset}:
+                                    mro = type.__getattribute__(kind, "__mro__")
+                                    if list in mro or any(base is not object and ("__class__" in type.__getattribute__(base, "__dict__") or "__getattribute__" in type.__getattribute__(base, "__dict__")) for base in mro):
+                                        reads[node].add(prefix + name + ":unknown")
+                                if value is None or (type(value) is list and not value):
+                                    reads[node].add(prefix + name + ":missing:" + argument)
+                                    if argument in namespace[name]:
+                                        reads[node].add(prefix + name + ":required_missing")
+                        else:
+                            reads[node].add(prefix + name + ":unknown")
+                    else:
+                        reads[node].add(prefix + name + ":raw")
             return
     except (AttributeError, TypeError):
         return
 
 
-def attribute(obj, name):
+def attribute(obj, name, mode="values"):
     value = getattr(obj, name)
-    record(obj, name)
+    record(obj, name, mode)
     return value
 
 
@@ -71,15 +114,34 @@ def dynamic(func, *args, **kwargs):
 
 
 class Transform(ast.NodeTransformer):
+    def __init__(self):
+        self.parents = []
+
+    def visit(self, node):
+        self.parents.append(node)
+        try:
+            return super().visit(node)
+        finally:
+            self.parents.pop()
+
     def visit_Attribute(self, node):
         self.generic_visit(node)
+        mode = "values"
+        parent = self.parents[-2] if len(self.parents) > 1 else None
+        if node.attr == "arg_types":
+            if isinstance(parent, (ast.For, ast.comprehension)) and parent.iter is node:
+                mode = "keys"
+            elif isinstance(parent, ast.Compare) and node in parent.comparators and all(isinstance(op, (ast.In, ast.NotIn)) for op in parent.ops):
+                mode = "keys"
+            elif isinstance(parent, ast.Call) and isinstance(parent.func, ast.Name) and parent.func.id in {"len", "tuple", "set", "list", "iter"}:
+                mode = "keys"
         if isinstance(node.ctx, ast.Load) and (
             node.attr.isupper() or node.attr in {"__dict__", "arg_types", "required_args"}
         ):
             return ast.copy_location(
                 ast.Call(
                     ast.Name("_rwx_typed_attr", ast.Load()),
-                    [node.value, ast.Constant(node.attr)],
+                    [node.value, ast.Constant(node.attr), ast.Constant(mode)],
                     [],
                 ),
                 node,

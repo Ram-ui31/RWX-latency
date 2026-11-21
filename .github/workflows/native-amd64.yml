@@ -22,7 +22,7 @@ jobs:
       - name: Inspect built candidate
         run: |
           docker image inspect rwx-checkpoint --format '{{.Architecture}}'
-          docker run --rm --network none --cpus 2 --memory 4g --pids-limit 256 --read-only --tmpfs /tmp:rw,size=64m --entrypoint python3 rwx-checkpoint -c "import pathlib,json; p=pathlib.Path('/app/assets/observations.json.gz'); assert p.is_file(); import gzip; m=json.loads(gzip.decompress(p.read_bytes())); assert m['version'] in (2,3) and m['per_task_ownership'] and len(m['passed'])>=1500; s=json.loads(gzip.decompress(pathlib.Path('/app/assets/settings.json.gz').read_bytes())); assert s['task_attribution'] and s['version'] in (2,3); print('Task-attributed observations and settings built')"
+          docker run --rm --network none --cpus 2 --memory 4g --pids-limit 256 --read-only --tmpfs /tmp:rw,size=64m --entrypoint python3 rwx-checkpoint -c "import pathlib,json; p=pathlib.Path('/app/assets/observations.json.gz'); assert p.is_file(); import gzip; m=json.loads(gzip.decompress(p.read_bytes())); assert m['version'] in (2,3) and m['per_task_ownership'] and len(m['passed'])>=1500; s=json.loads(gzip.decompress(pathlib.Path('/app/assets/settings.json.gz').read_bytes())); assert s['task_attribution'] and s['version'] == 8; c=json.loads(gzip.decompress(pathlib.Path('/app/assets/arguments.json.gz').read_bytes())); assert c['version']==1 and not c['unknown_classes'] and c['class_count']>=1000; print('Task-attributed observations and settings built')"
       - name: Smoke test the actual entrypoint offline
         shell: bash
         run: |

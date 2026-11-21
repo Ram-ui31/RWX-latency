@@ -54,6 +54,8 @@ def snapshot(source, inventory):
         name = path.removesuffix(".py").replace("/", ".").removesuffix(".__init__")
         modules.append((path, importlib.import_module(name)))
     states = {}
+    keys = {}
+    members = {}
     opaque = []
     for path, module in modules:
         for name, value in vars(module).copy().items():
@@ -71,9 +73,14 @@ def snapshot(source, inventory):
                     try:
                         raw = json.dumps(encode(item), sort_keys=True).encode()
                         states[key] = hashlib.sha256(raw).hexdigest()
+                        if type(item) is dict:
+                            key_bytes = json.dumps([encode(k) for k in item]).encode()
+                            keys[key] = hashlib.sha256(key_bytes).hexdigest()
+                        if type(item) in (set, frozenset) and all(type(v) is str for v in item):
+                            members[key] = sorted(item)
                     except (ValueError, TypeError, AttributeError):
                         opaque.append(key)
-    return {"states": states, "opaque": sorted(opaque)}
+    return {"states": states, "opaque": sorted(opaque), "keys": keys, "members": members}
 
 
 def main():
