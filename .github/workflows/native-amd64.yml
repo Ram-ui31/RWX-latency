@@ -7,7 +7,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - name: Confirm native x86 runner
@@ -35,6 +35,14 @@ jobs:
           if grep -E 'Traceback|Experimental candidate failed' smoke-stderr.log; then exit 1; fi
       - name: Measure three public runs on native Linux
         run: python3 tools/native_benchmark.py
+      - name: Compare verification cost policies
+        run: |
+          python3 tools/native_benchmark.py --group-verify 0 --output native-no-groups-results.json
+          python3 tools/native_benchmark.py --group-profile 0 --output native-old-cost-results.json
+      - name: Independently label twelve argument-contract checks
+        run: python3 tools/argument_holdout.py --native
+      - name: Measure argument checks with independent native labels
+        run: python3 tools/native_benchmark.py --data argument-holdout --output native-argument-results.json
       - name: Retain build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -44,6 +52,8 @@ jobs:
             build.log
             smoke-output.jsonl
             smoke-stderr.log
-            native-public-results.json
-            native-public-*.jsonl
-            native-public-*.log
+            native-*-results.json
+            native-*.jsonl
+            native-*.log
+            argument-holdout/answers.json
+            argument-holdout/manifest.json

@@ -144,6 +144,7 @@ def main():
     ap.add_argument("--minimal", action="store_true")
     ap.add_argument("--warm-fork", action="store_true")
     ap.add_argument("--cheap-modules", action="store_true")
+    ap.add_argument("--cost-profile", type=Path)
     a = ap.parse_args()
     tests, ids, ds = load_catalog(a.data / "tests.json")
     before = resource.getrusage(resource.RUSAGE_CHILDREN)
@@ -170,6 +171,17 @@ def main():
             raise ValueError("warm parent contains application code")
     rows = list(map(json.loads, a.upstream.read_text().splitlines()))
     report = []
+    profile = None
+    if a.cost_profile:
+        from research.observations.capsule_env import fingerprint
+
+        profile = json.loads(a.cost_profile.read_text())
+        if (
+            profile.get("version") != 1
+            or not profile.get("baseline_only")
+            or profile.get("environment") != fingerprint()
+        ):
+            raise ValueError("group calibration mismatch")
     for row in rows:
         selected = set(sum(row["workers"], []))
         if a.minimal:
@@ -195,10 +207,18 @@ def main():
             and "memory" not in tests[i]["id"]
             and "lazy_load" not in tests[i]["id"]
         }
+        if profile:
+            candidates &= {ids[node] for node in profile["passed"] if node in ids}
         original = schedule_cost(row["workers"], ds) / 1000
         floor = schedule_cost(optimize_schedule(selected - candidates, ds), ds) / 1000
         gain = original - floor
         estimate = 0.8 + a.seconds_factor * sum(ds[i] for i in candidates) / 1000
+        if profile:
+            # Measured CPU rather than the organizer's historical durations.
+            # Whole-suite import/fixture overhead is a conservative group estimate.
+            estimate = max(0.25, profile["overhead_cpu"]) + 1.5 * sum(
+                max(0.001, profile["costs"][tests[i]["id"]]) for i in candidates
+            )
         if (
             gain <= estimate
             or cpu() + estimate > a.budget
@@ -231,6 +251,7 @@ def main():
         )
     a.output.write_text("".join(json.dumps(r) + "\n" for r in rows))
     a.report.write_text(json.dumps(dict(cpu=cpu(), actions=report), indent=2))
+    print(json.dumps(dict(stage="group_verifier", cpu=cpu(), actions=report)))
 
 
 if __name__ == "__main__":

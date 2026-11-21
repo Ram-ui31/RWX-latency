@@ -1,4 +1,5 @@
 """Measure the actual entrypoint on public inputs under Linux runtime limits."""
+
 import argparse
 import importlib.util
 import json
@@ -27,7 +28,12 @@ raise SystemExit(p.returncode)
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", default="rwx-checkpoint")
-    parser.add_argument("--output", type=Path, default=Path("native-public-results.json"))
+    parser.add_argument("--group-verify", choices=("0", "1"))
+    parser.add_argument("--group-profile", choices=("0", "1"))
+    parser.add_argument("--data", type=Path)
+    parser.add_argument(
+        "--output", type=Path, default=Path("native-public-results.json")
+    )
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="rwx-native-public-") as directory:
         root = Path(directory)
@@ -42,37 +48,78 @@ def main():
             handle.extractall(kit, filter="data")
         data = root / "inputs"
         data.mkdir()
-        shutil.copyfile(kit / "sample/tests.json", data / "tests.json")
-        shutil.copytree(kit / "sample/commits", data / "commits")
-        spec = importlib.util.spec_from_file_location("official_score", kit / "score.py")
+        inputs = args.data or kit / "sample"
+        shutil.copyfile(inputs / "tests.json", data / "tests.json")
+        shutil.copytree(inputs / "commits", data / "commits")
+        spec = importlib.util.spec_from_file_location(
+            "official_score", kit / "score.py"
+        )
         scorer = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(scorer)
-        tests = json.loads((kit / "sample/tests.json").read_text())["tests"]
-        answers = json.loads((kit / "sample/answers.json").read_text())["commits"]
+        tests = json.loads((inputs / "tests.json").read_text())["tests"]
+        answers = json.loads((inputs / "answers.json").read_text())["commits"]
         results = []
+        env = []
+        for key, value in (
+            ("RWX_GROUP_VERIFY", args.group_verify),
+            ("RWX_GROUP_PROFILE", args.group_profile),
+        ):
+            if value is not None:
+                env.extend(["-e", key + "=" + value])
+        prefix = str(args.output.with_suffix("")).removesuffix("-results")
         for i in range(3):
             run = subprocess.run(
-                ["docker", "run", "--rm", "--network", "none", "--cpus", "2",
-                 "--memory", "4g", "--pids-limit", "256", "--read-only",
-                 "--tmpfs", "/tmp:rw,size=64m", "-v", str(data)+":/data:ro",
-                 "--entrypoint", "python3", args.image, "-B", "-c", WRAPPER],
-                capture_output=True, timeout=175, check=True,
+                [
+                    "docker",
+                    "run",
+                    "--rm",
+                    "--network",
+                    "none",
+                    "--cpus",
+                    "2",
+                    "--memory",
+                    "4g",
+                    "--pids-limit",
+                    "256",
+                    "--read-only",
+                    "--tmpfs",
+                    "/tmp:rw,size=64m",
+                    "-v",
+                    str(data) + ":/data:ro",
+                    *env,
+                    "--entrypoint",
+                    "python3",
+                    args.image,
+                    "-B",
+                    "-c",
+                    WRAPPER,
+                ],
+                capture_output=True,
+                timeout=175,
+                check=True,
             )
-            Path(f"native-public-{i}.jsonl").write_bytes(run.stdout)
-            Path(f"native-public-{i}.log").write_bytes(run.stderr)
-            cpu = float(next(line.split("=", 1)[1] for line in run.stderr.decode().splitlines()
-                             if line.startswith("RWX_CPU_SECONDS=")))
+            Path(f"{prefix}-{i}.jsonl").write_bytes(run.stdout)
+            Path(f"{prefix}-{i}.log").write_bytes(run.stderr)
+            cpu = float(
+                next(
+                    line.split("=", 1)[1]
+                    for line in run.stderr.decode().splitlines()
+                    if line.startswith("RWX_CPU_SECONDS=")
+                )
+            )
             score = scorer.evaluate_run(run.stdout, tests, answers)
             if not score["ok"]:
                 raise ValueError(score)
-            item = dict(run=i+1, cpu_seconds=cpu, **score)
-            item["total_seconds"] = score["simulated_milliseconds"]/1000+cpu
+            item = dict(run=i + 1, cpu_seconds=cpu, **score)
+            item["total_seconds"] = score["simulated_milliseconds"] / 1000 + cpu
             results.append(item)
             print(json.dumps(item), flush=True)
-        report = dict(results=results,
-                      median_total_seconds=statistics.median(r["total_seconds"] for r in results),
-                      timing="container cgroup CPU sampled immediately before wrapper exit")
-        args.output.write_text(json.dumps(report, indent=2)+"\n")
+        report = dict(
+            results=results,
+            median_total_seconds=statistics.median(r["total_seconds"] for r in results),
+            timing="container cgroup CPU sampled immediately before wrapper exit",
+        )
+        args.output.write_text(json.dumps(report, indent=2) + "\n")
 
 
 if __name__ == "__main__":

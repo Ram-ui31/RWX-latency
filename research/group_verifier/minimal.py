@@ -7,6 +7,13 @@ import os
 from pathlib import Path
 import sys
 import unittest
+import resource
+import time
+
+
+def cpu():
+    used = resource.getrusage(resource.RUSAGE_CHILDREN)
+    return time.process_time() + used.ru_utime + used.ru_stime
 
 
 class Outcomes(unittest.TestResult):
@@ -14,12 +21,18 @@ class Outcomes(unittest.TestResult):
         super().__init__()
         self.status = {}
         self.lifecycle_error = False
+        self.costs = {}
         # Stop at the first failure and retain every unexecuted test.
         self.failfast = True
 
     def startTest(self, test):
         super().startTest(test)
         self.status[test.id()] = "running"
+        self.started = cpu()
+
+    def stopTest(self, test):
+        self.costs[test.id()] = cpu() - self.started
+        super().stopTest(test)
 
     def addSuccess(self, test):
         if self.status.get(test.id()) == "running":
@@ -51,6 +64,7 @@ class Outcomes(unittest.TestResult):
 
 
 def execute(source, requested, output):
+    started = cpu()
     sys.path.insert(0, str(source.resolve()))
     suite = unittest.TestSuite()
     names = {}
@@ -87,8 +101,18 @@ def execute(source, requested, output):
             if status == "pass" and name in names
         ]
     )
+    total = cpu() - started
+    costs = {names[n]: v for n, v in result.costs.items() if n in names}
     output.write_text(
-        json.dumps({"passed": passed, "lifecycle_error": result.lifecycle_error})
+        json.dumps(
+            {
+                "passed": passed,
+                "lifecycle_error": result.lifecycle_error,
+                "costs": costs,
+                "total_cpu": total,
+                "overhead_cpu": max(0, total - sum(costs.values())),
+            }
+        )
     )
 
 
