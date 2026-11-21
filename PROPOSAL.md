@@ -1,3 +1,7 @@
+# Current design
+
+The current implemented proposal, risks, dead ends and validation are in [ARGUMENT_CONTRACTS.md](ARGUMENT_CONTRACTS.md). The earlier proposal below is retained as development history.
+
 # Current proposal revision
 
 The implemented next run uses baseline operand observations and source metadata

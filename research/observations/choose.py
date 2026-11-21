@@ -139,7 +139,25 @@ class Observations:
             selected.update(ordinary)
         if self.settings:
             selected = self.settings.narrow(text, selected)
-        return self.contracts.narrow(text, selected) if self.contracts else selected
+        return self.narrow_arguments(text, selected) if self.contracts else selected
+
+    def narrow_arguments(self, text, selected):
+        narrowed = self.contracts.narrow(text, selected)
+        if narrowed == selected:
+            return selected
+        # Typed value observations do not replace source/code/resource observers.
+        # Preserve both evidence channels before authorizing an omission.
+        guard = (selected - self.passed) | self.guarded
+        for change in parse_patch(text):
+            info = self.index.payload['files'].get(change.old_path)
+            if info is None:
+                return selected
+            artifacts = observed_artifacts(info['source'], apply_change(info['source'], change), change.old_path)
+            if not artifacts.isdisjoint(self.map['shared_metadata']):
+                return selected
+            for key in artifacts:
+                guard.update(self.index.map_ids(self.map['metadata'].get(key, [])))
+        return narrowed | (selected & guard)
 
     def original(self, text, changes):
         selected, _ = adaptive_select(self.index, text)

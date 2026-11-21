@@ -2,6 +2,11 @@ name: Native amd64 candidate check
 on:
   push:
   workflow_dispatch:
+    inputs:
+      wide_checks:
+        description: Run twelve independent full-suite mutation labels
+        type: boolean
+        default: true
 permissions:
   contents: read
 jobs:
@@ -40,8 +45,10 @@ jobs:
           python3 tools/native_benchmark.py --group-verify 0 --output native-no-groups-results.json
           python3 tools/native_benchmark.py --group-profile 0 --output native-old-cost-results.json
       - name: Independently label twelve argument-contract checks
+        if: github.event_name == 'workflow_dispatch' && inputs.wide_checks
         run: python3 tools/argument_holdout.py --native
       - name: Measure argument checks with independent native labels
+        if: github.event_name == 'workflow_dispatch' && inputs.wide_checks
         run: python3 tools/native_benchmark.py --data argument-holdout --output native-argument-results.json
       - name: Retain build diagnostics
         if: always()

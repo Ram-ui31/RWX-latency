@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import unittest
 
 from research.state_diff.choose import ArgumentContracts, boolean_edit
+from research.observations.choose import Observations
 
 OLD = 'class A:\n    arg_types = {"this": True, "optional": False}\n'
 NEW = OLD.replace('"optional": False', '"optional": True')
@@ -85,6 +86,26 @@ class ContractTests(unittest.TestCase):
             x = self.contract()
             x.payload[mode] = {}
             self.assertEqual(x.narrow(self.patch(), set(range(12))), set(range(12)))
+
+    def observation_guard(self):
+        x = Observations.__new__(Observations)
+        x.contracts = SimpleNamespace(narrow=lambda text, selected: set())
+        x.passed = set(range(11))
+        x.guarded = {9}
+        x.map = {"metadata": {"sqlglot/a.py#A": [8]}, "shared_metadata": []}
+        x.index = self.contract().index
+        return x
+
+    def test_code_and_resource_observers_survive_value_narrowing(self):
+        x = self.observation_guard()
+        self.assertEqual(x.narrow_arguments(self.patch(), set(range(12))), {8, 9, 11})
+
+    def test_shared_code_observer_vetoes_value_narrowing(self):
+        x = self.observation_guard()
+        x.map["shared_metadata"] = ["sqlglot/a.py#A"]
+        self.assertEqual(
+            x.narrow_arguments(self.patch(), set(range(12))), set(range(12))
+        )
 
 
 if __name__ == "__main__":

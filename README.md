@@ -1,55 +1,61 @@
-# Current CPU-budget candidate
-
-The default entrypoint adds budgeted verification of supported original unittest
-groups. Public median selector CPU rose from about 5.02 to 11.38 seconds,
-scheduled time fell from 125.574 to 113.110 seconds, and median total fell from
-130.591 to 124.495 seconds, with zero public misses.
-
-[CPU_TRADEOFF.md](CPU_TRADEOFF.md) records the measurements, rejected variants and
-limits. Native Linux and organizer results are pending. Earlier candidate notes follow.
-
-# Current candidate
-
-The default build now adds task-aware receiver-qualified scalar settings evidence.
-Its local public median is 130.591 seconds with zero misses. On three fresh settings
-mutations, its median total is 15.663 seconds versus 30.959 for the prior candidate,
-with zero misses. The latest organizer measurement remains 289 seconds for the
-prior candidate. Native Linux and organizer validation of this revision are pending.
-
-[DISTRIBUTION_AUDIT.md](DISTRIBUTION_AUDIT.md) explains the transfer gap, the
-reused-worker attribution error, the implementation and its limits. Earlier notes follow.
-
 # RWX Blast Radius
 
-The default Dockerfile now builds the baseline observation candidate described in
-[OBSERVATIONS.md](OBSERVATIONS.md). Its measured public median is 140.429 seconds
-including local CPU with zero misses. The previous entrypoint measured 210.415
-seconds on the same machine. The user reports 289 seconds on the organizer batch, versus 304 previously. See [the next-step plan](PUBLIC_REPOS_AND_NEXT_STEPS.md) for the revised target and public-entry review.
+Source-derived test selection and worker scheduling for SQLGlot at the organizer's pinned revision, `eb11aec4be8cb2122afe713a4816662c3f0fb2fa`.
 
-The build runs the pinned baseline tests to collect operand relations and source
-metadata readers. Runtime selection combines those observations with the existing
-coverage, fixture, IPC and scheduling maps. Expensive original-test verification
-runs only when a baseline cost measurement justifies it.
+The current candidate compiles argument-field dependencies through inheritance and copied dictionaries, records the validation states that can observe a Boolean requiredness change, and verifies remaining original tests only when their measured CPU cost is promising. Unknown changes retain broader coverage and source-reader evidence.
 
-The prior query-checkpoint candidate remains available through
-`docker build -f Dockerfile.checkpoint ...`. Its earlier research notes follow.
+## Measured results
 
-**Experimental scoring entrypoint:** the top-level Dockerfile now builds baseline checkpoints and cost profiles and starts `run_candidate.py`. It runs calibrated whole-test verification, then restricted checkpoint execution; failures fall back to the reference path. The Docker build is **not verified locally** (daemon access denied). The original static candidate remains in `Dockerfile.reference`. Check the image build before submitting a commit. The 209.604-second combined result was a macOS research measurement, not a scored Linux container result.
+| Evaluation | Scheduled seconds | Selector CPU seconds | Total seconds | Missed patches |
+|---|---:|---:|---:|---:|
+| Latest user-reported organizer result, older submitted candidate | 280.548 | 8.990 median | 289.538 median | 0 |
+| Public, native amd64, compiled contracts (`a4f7ca9`) | 106.577 | 18.519 median | 125.096 median | 0 |
+| Twelve additional argument checks, local integrated calibrated candidate | 59.140 | 3.534 | 62.674 | 0 |
 
-**Next candidate:** see [NEXT_RUN.md](NEXT_RUN.md). Adaptive selection plus child-process evidence reproduces **234.350 simulated seconds / zero public-sample misses**, with about 1.88 seconds of local selector CPU. The organizer result for this revision is not measured.
+Public native figures are medians of three actual offline containers. The twelve additional cases were frozen before labeling and independently ran all 1,620 original tests per case. Six patches caused 59 failing whole-test instances; all were retained. They cover one change family and do not establish hidden-distribution accuracy.
 
-# RWX latency: incremental validation
+The latest measured-CPU policy and independent native mutation labels are being evaluated on branch `rwx-native-evaluation-20261121`, commit `acc46ab`. Its workflow artifacts are authoritative for those measurements. No new organizer score is available. A private score below 150 seconds and a top-three finish remain unverified.
 
-Source-derived test selection and worker scheduling for pinned SQLGlot.
+See [the current proposal and risk analysis](ARGUMENT_CONTRACTS.md) for the architecture, evidence, dead ends, research sources and conditional private-score calculation. Earlier development records are retained in [DISTRIBUTION_AUDIT.md](DISTRIBUTION_AUDIT.md), [CPU_TRADEOFF.md](CPU_TRADEOFF.md), [OBSERVATIONS.md](OBSERVATIONS.md) and [the public repository review](PUBLIC_REPOS_AND_NEXT_STEPS.md). Their earlier measurements are historical.
 
-The root runtime uses the repaired dependency map and conservative IPC serialization edges. Public sample: **250.453 simulated seconds, zero missed patches**; exported runtime equivalence is checked against the recorded output. The map combines local profiles from different dependency environments. Canonical Linux/amd64 Docker validation and unseen-change reliability remain unverified. This is not a demonstrated sub-100 result.
+## Build and run
+
+Use native Linux amd64 for performance measurements. Docker emulation on an Apple Silicon Mac can be substantially slower and is not an equivalent timing environment.
 
 ```bash
-python3 selector.py --data-dir /path/to/data --mode hybrid
+docker build --platform linux/amd64 -t rwx-latency .
+docker run --rm --network none --cpus 2 --memory 4g \
+  --pids-limit 256 --read-only --tmpfs /tmp:rw,size=64m \
+  -v "$PWD/input:/data:ro" rwx-latency > predictions.jsonl
 ```
 
-The default Docker entrypoint uses adaptive mode. Runtime requires only Python's standard library and no API keys. The map is derived from pinned baseline source; no sample answers or patch-answer tables are included.
+The mounted input contains `tests.json` and `commits/*.patch`. Output is one JSON line per patch, with `commit` and `workers` fields and at most eight workers. Diagnostics go to stderr. The schedule uses the supplied recorded test durations and a two-second charge per active worker.
 
-`engine/` contains exact value/change and original-test validation primitives. `research/` preserves the developing evidence pipeline and tests; it requires a clean pinned SQLGlot checkout and pytest dependencies to run its capture/validation tools. Research pass-omission promotion is disabled. The root runtime uses dependency retrieval rather than unvalidated replay omissions.
+The build downloads only the pinned SQLGlot source and locked public Python packages, runs baseline tests and creates baseline-only observation/dataflow/cost artifacts. Runtime is offline and needs no API keys. Original test execution is charged as selector CPU. Public answers, generated mutation answers and patch-answer lookup tables are absent from the image.
 
-See IMPLEMENTATION.md and PROPOSAL.md for design and remaining work; their research paths refer to the original development tree. This repository omits research reports and sample data. Embedded source retains SQLGlot's license in THIRD_PARTY_SQLGLOT_LICENSE.
+The Docker build is limited to ten minutes in the native workflow. Runtime checks use two CPUs, 4 GB RAM, a read-only root, a 64 MB temporary filesystem and a non-root user. Three native runs are scored by the official public scorer outside the container; container cgroup CPU includes descendants.
+
+## Validation
+
+```bash
+python -m pytest -q tests
+python3 tools/native_benchmark.py --image rwx-latency
+python3 tools/argument_holdout.py --native --image rwx-latency
+python3 tools/native_benchmark.py --image rwx-latency \
+  --data argument-holdout --output native-argument-results.json
+```
+
+The latter commands require Docker on native Linux. Validation patches and independent labels are generated after building and remain outside the image. The labeling harness runs every original whole test, preserving pytest subtests and real process pools.
+
+## Layout
+
+* `run_candidate.py`: protocol entrypoint, conservative stage fallback and orchestration.
+* `blast/`: patch parsing, baseline dependency retrieval and worker scheduling.
+* `engine/`: checked patched trees, source identity, IPC and original-test execution.
+* `research/observations/`: baseline comparison operands and metadata/source observers.
+* `research/typed_settings/`: receiver-qualified configuration and validation observations.
+* `research/state_diff/`: compiled argument propagation; earlier differential-import prototype retained for research.
+* `research/tail_verifier/` and `research/group_verifier/`: measured-cost original-test verification.
+* `tools/`: pinned source download and independent native evaluation harnesses.
+
+The older checkpoint design is retained in `Dockerfile.checkpoint`; the static reference is in `Dockerfile.reference`. They are not the default candidate. Embedded source retains SQLGlot's license in `THIRD_PARTY_SQLGLOT_LICENSE`.
