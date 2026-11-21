@@ -1,6 +1,8 @@
 name: Native amd64 candidate check
 on:
   push:
+    branches-ignore:
+      - 'rwx-native-evaluation-*'
   workflow_dispatch:
     inputs:
       wide_checks:
@@ -64,3 +66,4 @@ jobs:
             native-*.log
             argument-holdout/answers.json
             argument-holdout/manifest.json
+            argument-holdout/*.log

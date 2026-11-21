@@ -205,7 +205,7 @@ def main():
                 ("tests/test_executor", "tests/test_sqlglotc")
             )
             and "memory" not in tests[i]["id"]
-            and "lazy_load" not in tests[i]["id"]
+            and ("lazy_load" not in tests[i]["id"] or profile is not None)
         }
         if profile:
             candidates &= {ids[node] for node in profile["passed"] if node in ids}

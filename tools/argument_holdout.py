@@ -14,6 +14,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, "/app" if Path("/app/engine/runner.py").exists() else str(ROOT))
@@ -165,7 +166,8 @@ def main():
     if args.native:
         output = args.output.resolve()
         answers = {}
-        for name, *_ in CASES:
+
+        def label(name):
             proc = subprocess.run(
                 [
                     "docker",
@@ -200,17 +202,24 @@ def main():
                 ],
                 capture_output=True,
                 timeout=220,
-                check=True,
+                check=False,
             )
             (output / (name + ".log")).write_bytes(proc.stderr)
-            answers[name] = json.loads(proc.stdout)
-            (output / "answers.json").write_text(json.dumps(dict(commits=answers)))
-            print(
-                name,
-                len(answers[name]["failing"]),
-                "failing; all 1620 original tests executed",
-                flush=True,
-            )
+            proc.check_returncode()
+            return json.loads(proc.stdout)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            pending = {pool.submit(label, case[0]): case[0] for case in CASES}
+            for future in as_completed(pending):
+                name = pending[future]
+                answers[name] = future.result()
+                (output / "answers.json").write_text(json.dumps(dict(commits=answers)))
+                print(
+                    name,
+                    len(answers[name]["failing"]),
+                    "failing; all 1620 original tests executed",
+                    flush=True,
+                )
 
 
 if __name__ == "__main__":

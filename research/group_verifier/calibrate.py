@@ -21,7 +21,6 @@ def supported(test, duration):
         and test["file"] != "tests/test_optimizer.py"
         and not test["file"].startswith(("tests/test_executor", "tests/test_sqlglotc"))
         and "memory" not in test["id"]
-        and "lazy_load" not in test["id"]
     )
 
 
@@ -43,6 +42,7 @@ def main():
             PYTHONDONTWRITEBYTECODE="1",
             PYTHON_CPU_COUNT="2",
             PYTHONPATH=str(tree.path),
+            PATH=str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
         )
         subprocess.run(
             [
