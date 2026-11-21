@@ -15,6 +15,36 @@ def read_owner():
 
 
 class TypedSettingsTests(unittest.TestCase):
+    def test_one_unchanged_missing_error_has_no_order_ambiguity(self):
+        roles = hook.validation_roles(
+            {"a": None, "b": 1, "c": 2}, {"a": True, "b": True, "c": False}, {"a", "b"}
+        )
+        self.assertEqual(roles, {":missing:a"})
+
+    def test_multiple_missing_errors_preserve_order_guard(self):
+        roles = hook.validation_roles(
+            {"a": None, "b": [], "c": None},
+            {"a": True, "b": True, "c": False},
+            {"a", "b"},
+        )
+        self.assertEqual(
+            roles, {":missing:a", ":missing:b", ":missing:c", ":required_missing"}
+        )
+
+    def test_custom_validation_containers_remain_unknown(self):
+        class CustomList(list):
+            pass
+
+        class CustomDict(dict):
+            pass
+
+        self.assertEqual(
+            hook.validation_roles(CustomDict(), {"a": True}, {"a"}), {":unknown"}
+        )
+        self.assertIn(
+            ":unknown", hook.validation_roles({"a": CustomList()}, {"a": True}, {"a"})
+        )
+
     def test_scalar_setting_requires_one_value_change(self):
         a = "class A:\n    FLAG = True\n    OTHER = 2\n"
         self.assertEqual(setting(a, a.replace("True", "False")), "A.FLAG")

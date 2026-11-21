@@ -78,7 +78,8 @@ class ArgumentContracts:
             != hashlib.sha256(index_path.read_bytes()).hexdigest()
             or self.payload["readers_sha256"]
             != hashlib.sha256(Path(readers_path).read_bytes()).hexdigest()
-            or self.readers.get("version") != 8
+            or self.readers.get("version") != 9
+            or self.readers.get("validation_order_guard") != "multiple_missing"
             or not self.readers.get("test_code_instrumented")
             or not self.readers.get("validation_observations")
             or not self.readers.get("task_attribution")

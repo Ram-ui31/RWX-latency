@@ -199,8 +199,8 @@ if __name__ == "__main__":
 
     verify(args.source)
     readers = json.loads(gzip.decompress(args.readers.read_bytes()))
-    if readers.get("version") != 8 or readers["environment"] != fingerprint():
-        raise ValueError("version-eight readers required")
+    if readers.get("version") != 9 or readers["environment"] != fingerprint():
+        raise ValueError("version-nine readers required")
     inventory = (
         json.loads(args.inventory.read_text())
         if args.inventory

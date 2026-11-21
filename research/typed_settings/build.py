@@ -82,9 +82,10 @@ def main():
         from research.observations.capsule_env import fingerprint
 
         result = dict(
-            version=8,
+            version=9,
             validation_observations=True,
-            test_shared={k: sorted(v) for k,v in test_shared.items()},
+            validation_order_guard="multiple_missing",
+            test_shared={k: sorted(v) for k, v in test_shared.items()},
             test_code_instrumented=True,
             task_attribution=True,
             environment=fingerprint(),

@@ -59,7 +59,7 @@ class Settings:
     def __init__(self, path, index, tests):
         self.payload = json.loads(gzip.decompress(Path(path).read_bytes()))
         if (
-            self.payload.get("version") not in (2, 3, 4, 5, 6, 7, 8)
+            self.payload.get("version") not in (2, 3, 4, 5, 6, 7, 8, 9)
             or not self.payload.get("task_attribution")
             or self.payload["environment"] != fingerprint()
         ):

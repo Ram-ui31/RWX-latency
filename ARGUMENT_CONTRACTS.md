@@ -39,9 +39,9 @@ Ignoring initialization would be incorrect too: changing a base class can affect
 1. Run the complete pinned baseline with receiver-qualified metadata observations. Both application and original test code are instrumented. Values, descriptors and process serialization remain original.
 2. Assign every real pool task its current whole-test owner. A persistent worker must not attribute later tasks to the test that first started it.
 3. Compile argument-value origins through inheritance, literal dictionaries, dictionary unpacking and supported constant copies. Validate the computed maps against the actual initialized program. The current source resolves all 1,076 expression classes, with zero unresolved classes.
-4. Record which tests consume values, keys, raw required-argument metadata, unknown/custom validation states, missing individual arguments and existing required-argument errors. Record test setup/module consumers separately.
+4. Record which tests consume values, keys, raw required-argument metadata, unknown/custom validation states, missing individual arguments and multiple existing required-argument errors. A single unchanged error has no relative order to change; a changed missing field is retained separately. Record test setup/module consumers separately.
 5. At selection time, accept only one existing Boolean-token replacement inside a literal class `arg_types` dictionary. Every other source byte, dictionary key and key order must remain identical. Multiple edits, formatting changes, new keys, arbitrary expressions and unsupported definitions retain upstream evidence.
-6. Propagate the changed field through the compiled graph. Retain value/reflection readers, affected validation states, shared test setup consumers, source readers and incomplete baseline observations. Other original tests can be removed from the incoming set.
+6. Propagate the changed field through the compiled graph. Retain value/reflection readers, affected validation states, shared test setup consumers, source/code/resource readers and incomplete baseline observations. Other original tests can be removed from the incoming set.
 7. Apply measured-cost original-test verification to remaining candidates. Preserve failed, skipped, timed-out and unexecuted whole tests. Preserve original class fixtures, subtests and spawned process behavior.
 8. Optimize the worker schedule using the official recorded durations and worker charges.
 
@@ -60,11 +60,11 @@ These measurements distinguish scheduled time from CPU and distinguish public in
 
 The twelve additional cases were frozen before inspecting outcomes. They span array, JSON, string, temporal, math and core expression modules. Every case was labeled by running all 1,620 original whole tests, independently of the selector. Six cases caused failures, comprising 59 failing whole-test instances across patches. Every one remained selected. This is a 76.0% scheduled-time reduction on this particular argument-metadata corpus.
 
-The complete typed baseline passed 1,620 tests and 25,440 subtests. There are 45 passing repository regression checks. They include reused spawned-worker ownership, inherited requiredness, raw observers, shared setup, source binding, exact edit eligibility, subtest failures and failed fixture cleanup.
+The complete typed baseline passed 1,620 tests and 25,440 subtests. There are 50 passing repository regression checks. They include reused spawned-worker ownership, inherited requiredness, raw observers, shared setup, source binding, exact edit eligibility, subtest failures and failed fixture cleanup.
 
 Native Linux runs use an actual amd64 image, two CPUs, 4 GB memory, no network, a read-only root, a 64 MB temporary filesystem and the submitted entrypoint. CPU comes from the container cgroup, including descendants. Three runs are measured. The native build completed within the ten-minute build limit.
 
-The measured-CPU policy and the twelve independent native whole-suite labels are being evaluated in the subsequent `acc46ab` workflow. See the workflow artifacts for exact results. The organizer has not evaluated either new commit in this report.
+The measured-CPU policy passed native public runs on `acc46ab` with a 120.655-second median, versus 124.002 with group verification disabled and 120.877 with the older cost estimate. The native mutation-labeling harness then failed before labeling: its mounted script incorrectly indexed the parent of a root-level path. That harness path has been fixed. Source/code/resource observers are now explicitly preserved through metadata refinement; the original lazy-import test is eligible for measured-cost live verification, preserving its child interpreter. Complete native checks of this subsequent revision are in progress. See the workflow artifacts for exact results. The organizer has not evaluated either new commit in this report.
 
 ## What can be promised
 
@@ -90,7 +90,7 @@ The next decisive evidence is the exact candidate's organizer evaluation with sc
 |---|---|---|
 | Import reads invalidate nearly everything | Separate initialization from key/value/validation observations; compile derived state | Other initialization transformations remain broad |
 | Missing inherited or copied metadata | Validate propagation across all loaded expression subclasses; refuse unresolved graphs | Newly supported source revisions require rebuilding and auditing |
-| Required-argument error order changes | Retain tests with existing missing required arguments | Conservatism can keep unaffected tests |
+| Required-argument error order changes | Retain tests with multiple existing missing required arguments and each changed missing field | Conservatism can keep unaffected tests |
 | Custom containers or deceptive runtime types | Record unknown states and retain their tests | Pinned-source reflection coverage is still an engineering assumption |
 | Test module/class setup stores derived state | Retain consumers of shared test setup | Shared observations can be broad |
 | Reused process workers corrupt attribution | Attach and restore ownership on every real submitted task | Missing worker reports prevent baseline-pass authorization |
