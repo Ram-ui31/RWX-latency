@@ -9,12 +9,13 @@ The current candidate compiles argument-field dependencies through inheritance a
 | Evaluation | Scheduled seconds | Selector CPU seconds | Total seconds | Missed patches |
 |---|---:|---:|---:|---:|
 | Latest user-reported organizer result, older submitted candidate | 280.548 | 8.990 median | 289.538 median | 0 |
-| Public, native amd64, preceding contracts (`c919952`) | 109.440 | 15.645 median | 125.085 median | 0 |
-| Twelve additional argument checks, local integrated calibrated candidate | 60.196 | 6.605 | 66.801 | 0 |
+| Public, corrected contracts/import guard (`748e3fd`), native amd64 | 109.440 | 16.287 median | 125.727 median | 0 |
+| Twelve frozen argument checks, same native candidate | 63.323 | 7.265 median | 70.588 median | 0 |
+| Four composed-schema/import checks, same native candidate | 55.651 | 1.586 median | 57.237 median | 0 |
 
-Public native figures are medians of three actual offline containers. The twelve additional cases were frozen before labeling and independently ran all 1,620 original tests per case. Six patches caused 59 failing whole-test instances; all were retained. They cover one change family and do not establish hidden-distribution accuracy.
+Native figures are medians of three actual offline containers. The sixteen additional cases were frozen before labeling and independently ran or accounted for all 1,620 original tests per case. Ten patches caused failures, comprising 1,274 failing whole-test instances across patches; all were retained. This corpus covers argument metadata, composed schemas and an import failure. It does not establish accuracy on the private distribution.
 
-The current revision additionally handles composed argument dictionaries and protects import-time validation. Four new cases measured 55.651 scheduled seconds plus 1.335 local CPU seconds, with zero misses. One case exposed 162 omitted import-related failures in the older broad map; the corrected model widens safely. The updated revision is being validated on branch `rwx-native-evaluation-20261121`. The preceding `c919952` native figures above are historical, not validation of that final correction. Its workflow artifacts are authoritative for those measurements. No new organizer score is available. A private score below 150 seconds and a top-three finish remain unverified.
+The import case exposed 162 omitted import-related failures in the older broad map. The corrected model selects every catalog test and disables live pruning for that hazard. Workflow [44959722803](https://github.com/Ram-ui31/RWX-latency/actions/runs/44959722803) validated that correction. The subsequent comparison in [44963605224](https://github.com/Ram-ui31/RWX-latency/actions/runs/44963605224) completed successfully. Cache-off measured 125.687700 seconds on public inputs and 70.950210 on the twelve-case corpus, with zero misses. Reference memoization produced no scheduling saving on native Linux and added overhead, so it is excluded from the recommended default. A final default-build confirmation is recorded below when complete. No new organizer score is available. A private score below 150 seconds and a top-three finish remain unverified.
 
 See [the current proposal and risk analysis](ARGUMENT_CONTRACTS.md) for the architecture, evidence, dead ends, research sources and conditional private-score calculation. Earlier development records are retained in [DISTRIBUTION_AUDIT.md](DISTRIBUTION_AUDIT.md), [CPU_TRADEOFF.md](CPU_TRADEOFF.md), [OBSERVATIONS.md](OBSERVATIONS.md) and [the public repository review](PUBLIC_REPOS_AND_NEXT_STEPS.md). Their earlier measurements are historical.
 
@@ -31,9 +32,11 @@ docker run --rm --network none --cpus 2 --memory 4g \
 
 The mounted input contains `tests.json` and `commits/*.patch`. Output is one JSON line per patch, with `commit` and `workers` fields and at most eight workers. Diagnostics go to stderr. The schedule uses the supplied recorded test durations and a two-second charge per active worker.
 
-The build downloads only the pinned SQLGlot source and locked public Python packages, runs baseline tests and creates baseline-only observation/dataflow/cost artifacts. Runtime is offline and needs no API keys. Original test execution is charged as selector CPU. Public answers, generated mutation answers and patch-answer lookup tables are absent from the image.
+The build downloads only the pinned SQLGlot source and locked public Python packages. It validates committed native baseline observation/dataflow maps, freshly calibrates original-test CPU costs. The original full-map rebuild remains in `Dockerfile.rebuild-maps`. Runtime is offline and needs no API keys. Original test execution is charged as selector CPU. Public answers, generated mutation answers and patch-answer lookup tables are absent from the image.
 
 The Docker build is limited to ten minutes in the native workflow. Runtime checks use two CPUs, 4 GB RAM, a read-only root, a 64 MB temporary filesystem and a non-root user. Three native runs are scored by the official public scorer outside the container; container cgroup CPU includes descendants.
+
+The rejected [native reference memoization experiment](NATIVE_REFERENCE_MEMO.md) is retained in `Dockerfile.native-memo` for reproducibility. It preserves SQLGlot computation and the real process pool, but its native CPU cost exceeded the available scheduling saving. It is absent from the default image.
 
 ## Validation
 

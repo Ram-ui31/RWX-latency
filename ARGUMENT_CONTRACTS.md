@@ -64,7 +64,7 @@ The complete version-nine typed baseline passed 1,620 tests and 25,440 subtests 
 
 Native Linux runs use an actual amd64 image, two CPUs, 4 GB memory, no network, a read-only root, a 64 MB temporary filesystem and the submitted entrypoint. CPU comes from the container cgroup, including descendants. Three runs are measured. The native build completed within the ten-minute build limit.
 
-The measured-CPU policy passed native public runs on `acc46ab` with a 120.655-second median, versus 124.002 with group verification disabled and 120.877 with the older cost estimate. The native mutation-labeling harness then failed before labeling: its mounted script incorrectly indexed the parent of a root-level path. That harness path has been fixed. Source/code/resource observers are now explicitly preserved through metadata refinement; the original lazy-import test is eligible for measured-cost live verification, preserving its child interpreter. Complete native checks of this subsequent revision are in progress. See the workflow artifacts for exact results. The organizer has not evaluated either new commit in this report.
+The measured-CPU policy passed native public runs on `acc46ab` with a 120.655-second median, versus 124.002 with group verification disabled and 120.877 with the older cost estimate. The native mutation-labeling harness then failed before labeling: its mounted script incorrectly indexed the parent of a root-level path. That harness path has been fixed. Source/code/resource observers are now explicitly preserved through metadata refinement; the original lazy-import test is eligible for measured-cost live verification, preserving its child interpreter. The later composed/import revision completed all native checks on commit `748e3fd`: public median 125.726840 seconds, twelve-case median 70.587812 seconds and four-case median 57.237053 seconds, with zero missed patches in every run. The organizer has not evaluated this candidate; these are public and independent mechanism measurements.
 
 ## Composed schemas and import failures: a second gap found
 
@@ -81,9 +81,11 @@ Four additional cases were frozen and labeled independently. The original test s
 
 The four-case total is 55.651 scheduled seconds plus 1.335259 local CPU seconds, or 56.986259 total, with zero missed patches. Earlier raw selection cost 126.948 scheduled seconds and omitted 162 failing whole tests on the import-breaking Subquery case, which would add a 300-second charge.
 
-Subquery demonstrated why this guard is necessary: DuckDB's generator parses a SQL template while importing. A new required alias breaks that initialization, and 1,020 numbered tests belong to files that cannot import. Another 152 fail during execution. Runtime-only consumers are insufficient for this situation. Widening the selection to all catalog tests preserves those failures at the same scheduled cost in this case. Original-test pruning is disabled for recognized import hazards, avoiding both wasted probes and assumptions about partially initialized global state.
+Subquery demonstrated why this guard is necessary: DuckDB's generator parses a SQL template while importing. A new required alias breaks that initialization, and 1,020 numbered tests belong to files that cannot import. Another 152 fail during execution. This single case dominates the combined failure-instance count; the total must not be treated as independent samples of arbitrary private changes. Runtime-only consumers are insufficient for this situation. Widening the selection to all catalog tests preserves those failures at the same scheduled cost in this case. Original-test pruning is disabled for recognized import hazards, avoiding both wasted probes and assumptions about partially initialized global state.
 
-The twelve earlier cases remain at 60.196 local scheduled seconds with zero misses. The public sample remains at 109.440 scheduled seconds with zero misses. The latest composed/import revision is undergoing native validation; the prior `c919952` native build measured a 125.085359 public median and a 70.821082 median on the twelve earlier checks, both with zero misses. That predecessor did not contain the new import guard and is not the recommended final revision.
+The native composed labels contain 1,215 failing whole-test instances, versus 1,217 locally: the original lazy-load test fails locally in the TryCast and ConcatWs cases but passes natively. All twelve earlier argument labels match exactly across environments. Each platform is evaluated against its own independently executed labels.
+
+The twelve earlier cases remain at 60.196 local scheduled seconds with zero misses. The public sample remains at 109.440 scheduled seconds with zero misses. The composed/import revision passed native validation: public median 125.726840 seconds, twelve-case median 70.587812 seconds, four-case median 57.237053 seconds, all with zero misses; the prior `c919952` native build measured a 125.085359 public median and a 70.821082 median on the twelve earlier checks, both with zero misses. That predecessor did not contain the new import guard and is not the recommended final revision.
 
 ## What can be promised
 
@@ -93,15 +95,19 @@ A universal zero-miss guarantee, immunity to arbitrary hidden tests, a private s
 
 ## Forecast discipline
 
-The public native median of 125.096 seconds is an actual measurement. It is not a private forecast.
+The corrected candidate's public native median of 125.726840 seconds is an actual measurement. It is not a private forecast.
 
 A useful sensitivity calculation starts from the known private scheduled time, 280.548 seconds. If a fraction q of that cost receives the approximately 75.6% reduction measured on the twelve argument checks, and the rest remains unchanged, then a scenario is:
 
-`private total ≈ 280.548 × (1 − 0.756 × q) + 18.5`
+`private total ≈ 280.548 × (1 − 0.756 × q) + CPU`
 
-Under these assumptions, q must be about 70% to get below 150 seconds. Other settings improvements could reduce that requirement; different private mutations, durations or CPU could increase it. We do not know q. It would be misleading to present this conditional scenario as a calibrated confidence interval or claim that the target has been reached.
+With 16–20 seconds of CPU, q must be approximately 69–71% to get below 150 seconds under these assumptions. Other settings improvements could reduce that requirement; different private mutations, durations or CPU could increase it. We do not know q. It would be misleading to present this conditional scenario as a calibrated confidence interval or claim that the target has been reached.
 
 The next decisive evidence is the exact candidate's organizer evaluation with scheduled time, CPU and missed-patch counts. A private result cannot be inferred by multiplying a public ratio after the earlier transfer failure. The real Chrome scorer session was checked too: it requires the registered email and a one-time code, so autonomous private evaluation is currently blocked by sign-in. The sign-in page is left ready for the user.
+
+## Additional CPU work examined
+
+Direct original TPC-DS verification cost 28.048 CPU seconds with the host default pool size and 19.556 with two real spawned workers; both lacked the required margin against its scheduling saving. Profiling then located 9.865 CPU seconds in native reference generation. [NATIVE_REFERENCE_MEMO.md](NATIVE_REFERENCE_MEMO.md) documents the narrower memoization experiment, its exact cache checks, preserved original computation and completed native ablation. Native baseline cost was 20.450154 CPU seconds, so no action qualified and the stage only added overhead. It is rejected from the default build.
 
 ## Next decision after private feedback
 
@@ -130,6 +136,7 @@ Keep the tested architecture fixed until its organizer breakdown arrives. If sch
 * Per-patch differential imports established the argument propagation mechanism but added roughly 0.7 local CPU seconds per eligible patch. Compile that dataflow once during the baseline build instead.
 * A scalar-settings-only refinement could not handle dictionary values or derived `required_args`. It remains useful for its supported fragment but is insufficient as the base representation.
 * Plain AST equality overlooks source bytes and line-table observers. It is insufficient edit eligibility for this refinement.
+* Native reference memoization saved about five total seconds locally, but its native baseline cost rose to 20.450154 CPU seconds; the gate declined every action and stage overhead worsened public and held-out totals by about 0.6 seconds. Keep it out of the default image.
 * Sample-ratio private forecasts were poorly calibrated. Do not repeat them.
 
 ## Competition target
