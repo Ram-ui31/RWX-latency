@@ -61,7 +61,7 @@ class Guard:
                     for name in targets:
                         if name.startswith('__'):
                             return None
-                        names.append((name, path, span))
+                        names.append((name, path, span, bool(qual) and name.isupper()))
             else:
                 return None
         return lines, names, fixtures, code
@@ -73,8 +73,8 @@ class Guard:
             from engine.names import NameIndex
             self.names = NameIndex(self.source_root)
         outside = self.outside[suite]
-        for name, path, span in names:
-            for f, a, b in self.names.lines_for(name):
+        for name, path, span, setting in names:
+            for f, a, b in self.names.lines_for(name, class_setting=setting):
                 for line in range(a, b + 1):
                     if (f, line) in outside and not (f == path and span[0] <= line <= span[1]):
                         return False
@@ -101,7 +101,17 @@ class Guard:
 
     def check(self, source, text, suites, fixtures=(), timeout=30):
         info = self.analyze(source, text)
-        lines, names = (info[0], info[1]) if info else (None, None)
+        lines = None
+        if info:
+            lines = set(info[0])
+            if info[1]:
+                if self.names is None:
+                    from engine.names import NameIndex
+                    self.names = NameIndex(source)
+                for name, path, span, setting in info[1]:
+                    lines.update((path, n) for n in range(span[0], span[1] + 1))
+                    for f, a, b in self.names.lines_for(name, class_setting=setting):
+                        lines.update((f, n) for n in range(a, b + 1))
         """Return ({suite: 'equal'|other}, cpu seconds); fixture failures make every suite unresolved."""
         before = resource.getrusage(resource.RUSAGE_CHILDREN)
         status = {}
@@ -119,7 +129,7 @@ class Guard:
                 edited.write_text(json.dumps(sorted(f'{f}:{n}' for f, n in (lines or ()))))
                 env = {**os.environ, 'PYTHONDONTWRITEBYTECODE': '1', 'PYTHONPATH': str(tree),
                        'RWX_PINNED_ROOT': str(Path(source).resolve())}
-                if lines is not None and not names:
+                if lines is not None:
                     env['RWX_GUARD_EDITED'] = str(edited)
                 args = [*suites, *('fixture=' + str(tree / f) for f in fixtures)]
                 proc = subprocess.Popen([sys.executable, '-B', str(HERE / 'guard.py'), 'check', str(tree),

@@ -37,7 +37,11 @@ commits and missed 8 commits (1.3% of commits, 300 s each).
    name is in that "outside" set, recompute only the queries whose traced lines intersect
    the edit; identical outputs remove `test_execute_tpcds`/`test_execute_tpch`/
    `test_optimized_tpch`. TPC-H fixture edits are checked by loading the fixture with the
-   original loader.
+   original loader. Same-target value edits (class settings, dict entries) are eligible
+   when no outside line reads that name: plain assignments to the same name elsewhere are
+   writes, `__dict__.get("NAME")`-style reads count as reads of NAME, and a short list of
+   reviewed computed-name reads (`*_sql` dispatch tables, instance attributes, module
+   lookups) cannot read an upper-case class setting.
 
 ## Measured (local Linux, Python 3.13.18, locked packages, 2 CPUs)
 
