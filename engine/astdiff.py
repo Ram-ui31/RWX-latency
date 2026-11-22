@@ -15,18 +15,29 @@ neighbours/header of an insertion point.
 import ast
 import copy
 import difflib
+import functools
 
 _DEFS = (ast.FunctionDef, ast.AsyncFunctionDef)
 _DOC_OWNERS = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
 
 
+_STMT_LISTS = ('body', 'orelse', 'finalbody', 'handlers', 'cases')
+
+
 def _strip(tree):
-    for node in ast.walk(tree):
+    """Remove docstrings of the module, classes and functions (statements only)."""
+    stack = [tree]
+    while stack:
+        node = stack.pop()
         if isinstance(node, _DOC_OWNERS):
             b = node.body
             if b and isinstance(b[0], ast.Expr) and isinstance(b[0].value, ast.Constant) \
                     and isinstance(b[0].value.value, str):
                 node.body = b[1:]
+        for field in _STMT_LISTS:
+            for child in getattr(node, field, None) or ():
+                if isinstance(child, (ast.stmt, ast.excepthandler, ast.match_case)):
+                    stack.append(child)
     return tree
 
 
@@ -94,8 +105,55 @@ def _header_equal(a, b):
     return True
 
 
+def _safe_default(node):
+    """A default whose evaluation at definition time cannot fail or have effects."""
+    if node is None or isinstance(node, ast.Constant):
+        return True
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd, ast.Not)):
+        return _safe_default(node.operand)
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        return all(_safe_default(e) for e in node.elts)
+    if isinstance(node, ast.Dict):
+        return all(k is not None and _safe_default(k) and _safe_default(v) for k, v in zip(node.keys, node.values))
+    return False
+
+
+def _signature_values_only(o, n, lazy_annotations):
+    """Two defs that differ only in default values (and lazy annotations)."""
+    if type(o) is not type(n) or not isinstance(o, _DEFS) or o.name != n.name:
+        return False
+    if [_d(x) for x in o.decorator_list] != [_d(x) for x in n.decorator_list]:
+        return False
+    if getattr(o, 'type_params', None) or getattr(n, 'type_params', None):
+        return False
+    a, b = o.args, n.args
+
+    def names(args):
+        return ([x.arg for x in args.posonlyargs], [x.arg for x in args.args],
+                args.vararg.arg if args.vararg else None, [x.arg for x in args.kwonlyargs],
+                args.kwarg.arg if args.kwarg else None, len(args.defaults),
+                [d is None for d in args.kw_defaults])
+    if names(a) != names(b):
+        return False
+    if not lazy_annotations:
+        def ann(args, f):
+            items = args.posonlyargs + args.args + args.kwonlyargs + [x for x in (args.vararg, args.kwarg) if x]
+            return [_d(x.annotation) if x.annotation else None for x in items] + [_d(f.returns) if f.returns else None]
+        if ann(a, o) != ann(b, n):
+            return False
+    changed = [y for x, y in zip(a.defaults + a.kw_defaults, b.defaults + b.kw_defaults)
+               if (_d(x) if x else None) != (_d(y) if y else None)]
+    if not all(_safe_default(d) for d in changed):
+        return False
+    return [_d(d) for d in a.defaults] != [_d(d) for d in b.defaults] or \
+        [_d(d) if d else None for d in a.kw_defaults] != [_d(d) if d else None for d in b.kw_defaults] or \
+        lazy_annotations
+
+
 class _Diff:
-    def __init__(self):
+    def __init__(self, old_lines=None, new_lines=None, lazy_annotations=False):
+        self.old_lines, self.new_lines = old_lines, new_lines
+        self.lazy_annotations = lazy_annotations
         self.sites = []
         self.import_time = False
         self.functions = []  # qualified names of functions with body edits
@@ -105,7 +163,7 @@ class _Diff:
 
     def block(self, old, new, ctx, header=None, qual=''):
         """Compare two statement lists. ctx is 'module', 'class' or 'function'."""
-        a, b = [_d(s) for s in old], [_d(s) for s in new]
+        a, b = [self._key(s, self.old_lines) for s in old], [self._key(s, self.new_lines) for s in new]
         if a == b:
             return
         sm = difflib.SequenceMatcher(None, a, b, autojunk=False)
@@ -134,8 +192,17 @@ class _Diff:
                 self.sites.append(header)
             self.functions.append(qual)
 
+    def _key(self, stmt, lines):
+        """Source text of a statement: identical text means an identical stripped tree."""
+        if lines is None:
+            return _d(stmt)
+        start = min([stmt.lineno] + [d.lineno for d in getattr(stmt, 'decorator_list', []) or []])
+        return '\n'.join(lines[start - 1:stmt.end_lineno]).strip()
+
     def pair(self, o, n, ctx, qual):
-        if _d(o) == _d(n):
+        if self._key(o, self.old_lines) == self._key(n, self.new_lines):
+            return
+        if not (isinstance(o, (_DEFS, ast.ClassDef)) and _header_equal(o, n)) and _d(o) == _d(n):
             return
         if isinstance(o, _DEFS) and _header_equal(o, n):
             q = (qual + '.' if qual else '') + o.name
@@ -148,6 +215,14 @@ class _Diff:
                 self.block(o.body, n.body, 'function', _header_span(o), q)
             else:
                 self.block(o.body, n.body, 'class', None, q)
+            return
+        if ctx != 'function' and _signature_values_only(o, n, self.lazy_annotations):
+            # Defaults are only observed by calls that omit the argument; annotations
+            # are never evaluated under ``from __future__ import annotations``.
+            first = min([o.lineno] + [d.lineno for d in o.decorator_list])
+            self.call_sites.append(first)
+            q = (qual + '.' if qual else '') + o.name
+            self.block(o.body, n.body, 'function', None, q)
             return
         if ctx != 'function':
             lambdas = _lambda_only(o, n)
@@ -221,13 +296,24 @@ def _lambda_only(o, n):
     return out
 
 
+@functools.lru_cache(maxsize=64)
+def stripped(text):
+    """Docstring-free AST of ``text`` and its source lines (shared, read-only)."""
+    tree = _strip(ast.parse(text.encode('utf-8') if isinstance(text, str) else text))
+    return tree, text.splitlines()
+
+
 def classify(old, new):
-    a = _strip(ast.parse(old.encode('utf-8') if isinstance(old, str) else old))
-    b = _strip(ast.parse(new.encode('utf-8') if isinstance(new, str) else new))
-    if _d(a) == _d(b):
-        return 'noop', [], []
-    diff = _Diff()
+    a, la = stripped(old)
+    b, lb = stripped(new)
+    lazy = any(isinstance(st, ast.ImportFrom) and st.module == '__future__'
+               and any(al.name == 'annotations' for al in st.names) for st in a.body[:5]) and \
+        any(isinstance(st, ast.ImportFrom) and st.module == '__future__'
+            and any(al.name == 'annotations' for al in st.names) for st in b.body[:5])
+    diff = _Diff(la, lb, lazy)
     diff.block(a.body, b.body, 'module')
+    if not (diff.import_time or diff.sites or diff.call_sites or diff.functions):
+        return 'noop', [], []
     if diff.import_time:
         if not diff.structural:
             return 'value', diff.value_targets, diff.call_sites

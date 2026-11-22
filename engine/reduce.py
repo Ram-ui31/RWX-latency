@@ -11,23 +11,19 @@ file. Files that fail to parse, change encoding, are created, deleted, renamed o
 binary are never reduced.
 """
 import ast
+import functools
 import re
 from pathlib import Path
 
 from blast.patches import Change, Hunk, apply_change, parse_patch, PatchError
+from engine.astdiff import stripped
 
 _DOC_OWNERS = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
 
 
-def _canonical(text):
-    tree = ast.parse(text.encode('utf-8'))
-    for node in ast.walk(tree):
-        if isinstance(node, _DOC_OWNERS):
-            body = node.body
-            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
-                    and isinstance(body[0].value.value, str):
-                node.body = body[1:]
-    return ast.dump(tree, annotate_fields=True, include_attributes=False)
+def _same(a, b):
+    from engine.astdiff import classify
+    return classify(a, b)[0] == 'noop'
 
 
 def _coding_cookie(text):
@@ -66,8 +62,7 @@ def _kept_hunks(old, change):
     new = apply_change(old, change)
     if _coding_cookie(old) or _coding_cookie(new):
         return None
-    target = _canonical(new)
-    if _canonical(old) == target:
+    if _same(old, new):
         return []
     if len(change.hunks) < 2:
         return None
@@ -75,13 +70,13 @@ def _kept_hunks(old, change):
     for h in change.hunks:
         try:
             single = _apply_hunks(old, [h])
-            if _canonical(single) != _canonical(old):
+            if not _same(old, single):
                 kept.append(h)
         except (SyntaxError, ValueError, PatchError):
             kept.append(h)
     if len(kept) == len(change.hunks):
         return None
-    if _canonical(_apply_hunks(old, kept)) != target:
+    if not _same(_apply_hunks(old, kept), new):
         return None
     return kept
 

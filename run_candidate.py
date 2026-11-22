@@ -10,7 +10,13 @@ def run(args):
  if p.stdout:print(p.stdout,file=sys.stderr,end='')
 
 def main():
+ import time
+ started=time.monotonic()
  data=Path(os.environ.get('DATA_DIR','/data'));source=ROOT/'pinned-source'
+ # The run limit is about 4.5 wall seconds per commit (3 min for ~40, 4.5 min for ~60).
+ n=max(1,len(list((data/'commits').glob('*.patch'))))
+ deadline=float(os.environ.get('RWX_SECONDS_PER_COMMIT','4.5'))*n
+ def left():return deadline-(time.monotonic()-started)
  with tempfile.TemporaryDirectory(prefix='rwx-batch-') as folder:
   folder=Path(folder);upstream=folder/'upstream.jsonl';final=folder/'final.jsonl'
   observations=os.environ.get('RWX_OBSERVATIONS')
@@ -24,9 +30,14 @@ def main():
      run([ROOT/'research/native_oracle/run.py','--source',source,'--data',data,'--cache',os.environ['RWX_NATIVE_ORACLE'],'--contracts',contracts,'--readers',settings,'--upstream',upstream,'--output',memo,'--selection-report',folder/'tail.json','--report',folder/'memo.json','--budget','20','--wall-budget','30'])
      upstream=memo
     except (RuntimeError,OSError,ValueError):pass
-   if os.environ.get('RWX_GROUP_VERIFY')=='1':
+   if os.environ.get('RWX_INFER')=='1' and (ROOT/'assets/infer-costs.json').is_file() and left()>0.5*deadline:
     try:
-     run([ROOT/'research/group_verifier/run.py','--source',source,'--data',data,'--upstream',upstream,'--output',final,'--report',folder/'groups.json','--selection-report',folder/'tail.json','--minimal','--cheap-modules','--seconds-factor','0.1','--budget',os.environ.get('RWX_GROUP_CPU','20'),'--wall-budget',os.environ.get('RWX_GROUP_WALL','80'),*(['--cost-profile',ROOT/'assets/group-costs.json'] if os.environ.get('RWX_GROUP_PROFILE','1')=='1' and (ROOT/'assets/group-costs.json').is_file() else [])])
+     run([ROOT/'research/infer/run.py','--source',source,'--data',data,'--upstream',upstream,'--output',final,'--report',folder/'infer.json','--costs',ROOT/'assets/infer-costs.json','--maxnodes',ROOT/'assets/maxnodes.json','--budget',os.environ.get('RWX_INFER_CPU',str(1.5*n)),'--wall-budget',os.environ.get('RWX_INFER_WALL',str(min(1.6*n,left()-0.35*deadline)))])
+     upstream=final;final=folder/'final2.jsonl'
+    except (RuntimeError,OSError):pass
+   if os.environ.get('RWX_GROUP_VERIFY')=='1' and left()>0.3*deadline:
+    try:
+     run([ROOT/'research/group_verifier/run.py','--source',source,'--data',data,'--upstream',upstream,'--output',final,'--report',folder/'groups.json','--selection-report',folder/'tail.json','--minimal','--cheap-modules','--seconds-factor','0.1','--budget',os.environ.get('RWX_GROUP_CPU','10'),'--wall-budget',os.environ.get('RWX_GROUP_WALL',str(min(30.0,left()-0.2*deadline))),*(['--cost-profile',ROOT/'assets/group-costs.json'] if os.environ.get('RWX_GROUP_PROFILE','1')=='1' and (ROOT/'assets/group-costs.json').is_file() else [])])
     except (RuntimeError,OSError):final=upstream
    else:final=upstream
    sys.stdout.write(final.read_text());sys.stdout.flush();return

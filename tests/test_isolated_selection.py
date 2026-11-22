@@ -61,6 +61,20 @@ class TestClassify(unittest.TestCase):
         self.assertEqual(self.kind(OLD.replace('    def f(self, y):', '    def f(self, y=1):'))[0], 'import')
 
 
+class TestSignatureDefaults(unittest.TestCase):
+    SRC = 'from __future__ import annotations\n\n\ndef f(a, copy: bool = True, rules=RULES):\n    return a\n'
+
+    def test_constant_default_flip_is_call_time(self):
+        kind, spans, calls = classify(self.SRC, self.SRC.replace('copy: bool = True', 'copy: bool = False'))
+        self.assertEqual((kind, calls), ('body', [4]))
+
+    def test_non_constant_default_is_structural(self):
+        self.assertEqual(classify(self.SRC, self.SRC.replace('= True', '= OTHER'))[0], 'import')
+
+    def test_new_parameter_is_structural(self):
+        self.assertEqual(classify(self.SRC, self.SRC.replace('(a, ', '(a, b=1, '))[0], 'import')
+
+
 class FakeIndex:
     payload = {'reads': {}}
 
