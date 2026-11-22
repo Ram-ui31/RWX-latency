@@ -143,6 +143,39 @@ class Observations:
             selected = self.settings.narrow(text, selected)
         return self.narrow_arguments(text, selected) if self.contracts else selected
 
+    def operand_refinement(self, block):
+        """(safe tests, guard tests) for a single supported operator substitution, else None.
+
+        Uses the same baseline operand evidence and guards as ``select``; callers must
+        only apply it when this block is the patch's only semantic edit.
+        """
+        changes = parse_patch(block)
+        if len(changes) != 1:
+            return None
+        change = changes[0]
+        path = change.old_path
+        info = self.index.payload['files'].get(path)
+        if (path != change.new_path or change.binary or not change.hunks or not info
+                or not path.startswith('sqlglot/') or self.map['source'].get(path) != info['sha256']):
+            return None
+        old = info['source']
+        new = apply_change(old, change)
+        if not any(line.startswith('-') and re.search(r'\bis\b|[<>]', line)
+                   for h in change.hunks for line in h.lines):
+            return None
+        site = operand_site(old, new, path)
+        if not site:
+            return None
+        artifacts = observed_artifacts(old, new, path)
+        if not artifacts.isdisjoint(self.map['shared_metadata']):
+            return None
+        guard = set(self.guarded) | self.index.map_ids(self.index.payload['reads'].get(path, []))
+        for key in artifacts:
+            guard.update(self.index.map_ids(self.map['metadata'].get(key, [])))
+        safe = {self.index.ids[node] for node, mask in self.map['sites'].get(site[0], {}).items()
+                if node in self.index.ids and mask and not (mask & ~site[1])}
+        return safe, guard
+
     def narrow_arguments(self, text, selected):
         narrowed = self.contracts.narrow(text, selected)
         if narrowed > selected:

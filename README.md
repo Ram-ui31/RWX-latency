@@ -1,5 +1,7 @@
 # RWX Blast Radius
 
+**Latest change (22 Nov): see [NEXT_RUN.md](NEXT_RUN.md)** — isolated per-test coverage, docstring/comment reduction and a TPC-H/TPC-DS differential guard. On 637 labeled organizer-style mutations the simulated cost per 40 commits fell from ~529 to ~311 and misses from 8 to 2; the public sample went from 109.4 to 106.9.
+
 Source-derived test selection and worker scheduling for SQLGlot at the organizer's pinned revision, `eb11aec4be8cb2122afe713a4816662c3f0fb2fa`.
 
 The current candidate compiles argument-field dependencies through inheritance and copied dictionaries, records the validation states that can observe a Boolean requiredness change, and verifies remaining original tests only when their measured CPU cost is promising. Unknown changes retain broader coverage and source-reader evidence.

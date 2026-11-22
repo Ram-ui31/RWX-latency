@@ -1,47 +1,64 @@
-# Next run: mixed granularity and child-process evidence
+# Next run: isolated coverage, docstring/comment reduction, TPC guard
 
-21 November 2026. The user reports **324 seconds** on the organizer set. That total does not identify simulation, CPU, or missed-patch components. It is not directly comparable with the smaller public sample.
+22 November 2026. The organizer reported about 270–289 seconds (0 misses) while the public
+sample scored about 110–127. The public sample is not representative: on 637 independently
+labeled mutations in the organizer's style (public competitor corpora, re-batched into
+40-commit runs), the previous default scored a median of ~590 simulated seconds per 40
+commits and missed 8 commits (1.3% of commits, 300 s each).
 
-## Implemented
+## What was wrong
 
-1. Profile the original pinned lazy-import test's child interpreter. Merge actual function-entry and module-import evidence into the source map. Record its statement coverage as incomplete. This resolves the last always-selected untrusted test; it does not claim support for arbitrary subprocesses.
-2. Use statement/reader selection for supported body and fixture edits. Use the existing broader module/class policy for initialization changes. Invalid context, source observers and unsupported changes retain conservative fallbacks.
-3. Extend serialization closure through local helpers, explicit imported helpers, module aliases and aliases to process-pool classes. Union ambiguous import aliases instead of silently taking the last one. Keep these extra consumers additive.
-4. Handle malformed patches as full-selection fallbacks instead of rejecting the entire runtime batch.
+| Cause | Share of excess (per 40 commits, previous default) |
+|---|---:|
+| Docstring/comment edits fell back to all 1,620 tests (36.8 s each) | ~87 |
+| Shared-process coverage attributed import-time work, caches and lazy imports to the first test only, so body edits either fell back to all tests or **missed** failures (import-time helpers, parser code run while importing, broken imports) | ~90 + most misses |
+| TPC-DS (21.5 s) kept for optimizer/parser/fixture edits that cannot change its result | ~88 |
 
-No outcome-trained weights, patch hashes, or edit-kind-to-failure tables are used. All new map evidence comes from the pinned baseline. Live replay omissions remain disabled.
+## Implemented (default image)
 
-## Research basis
+1. `engine/reduce.py` drops Python hunks whose docstring-normalized AST is unchanged
+   (comments, whitespace, docstrings). Tests that read the file as data are kept.
+2. `maps/isolated-coverage.json.gz` + `engine/isosel.py`: every catalog test traced alone
+   (base import / test module / single test, spawned interpreters included; all 1,620
+   passed). `engine/astdiff.py` classifies each Python edit:
+   * body edits → tests that executed the edited statements, changed headers, insertion
+     neighbours, or entered an edited lambda;
+   * structural import-time edits (imports, defs, signatures, syntax errors) → every
+     isolated importer of the module;
+   * same-target value assignments (class settings, dict entries) → unchanged receiver/
+     key-sensitive selector (isolated importers were measured to cost more than its
+     residual misses);
+   * fixtures/new/deleted files → unchanged selector.
+   Baseline operand evidence (single `is`/`<`/`>` substitutions) still removes tests whose
+   recorded operands cannot change the comparison.
+3. `research/tpcds_guard/`: at build, record per-query canonical outputs of the stages the
+   executor tests recompute (parse, DuckDB transpile, optimize, plan) and every SQLGlot
+   line the rest of the test executes. At run time, when no edited line or edited setting
+   name is in that "outside" set, recompute only the queries whose traced lines intersect
+   the edit; identical outputs remove `test_execute_tpcds`/`test_execute_tpch`/
+   `test_optimized_tpch`. TPC-H fixture edits are checked by loading the fixture with the
+   original loader. Same-target value edits (class settings, dict entries) are eligible
+   when no outside line reads that name: plain assignments to the same name elsewhere are
+   writes, `__dict__.get("NAME")`-style reads count as reads of NAME, and a short list of
+   reviewed computed-name reads (`*_sql` dispatch tables, instance attributes, module
+   lookups) cannot read an upper-case class setting.
 
-- [Ekstazi, ISSTA 2015](https://mir.cs.illinois.edu/~marinov/publications/GligoricETAL15PracticalRTS.pdf): dynamic file dependencies and end-to-end measurement. Applied here by accounting for analysis CPU and retaining raw file/fixture dependencies.
-- [STARTS, ASE 2017](https://mir.cs.illinois.edu/awshi2/publications/ASEDEMO2017.pdf): transitive static dependencies. Applied here to process serialization helpers.
-- [NameRTS, 2026 preprint](https://arxiv.org/html/2605.25356v1): Python name/element dependencies, import-time behavior and context-aware pruning. Motivated the initialization guard experiment and alias handling. This implementation is not NameRTS. Its published empirical safety is not a guarantee for RWX.
+## Measured (local Linux, Python 3.13.18, locked packages, 2 CPUs)
 
-## Controlled comparisons on the 30 inspected public patches
+| Run | Public sample sim | Corpus sim / 40 (organizer kinds) | Corpus misses |
+|---|---:|---:|---:|
+| Previous default | 109.4 | 529 | 8 |
+| + reduction | 109.0 | 453 | 8 |
+| + isolated coverage + operand evidence + TPC guard | 106.9 | 311 | 2 |
 
-| Policy | Simulated seconds | Missed patches | Decision |
-|---|---:|---:|---|
-| Previous submitted-code local reproduction | 250.453 | 0 | Reference |
-| Blanket fine-grained impact mode | 483.425 | 0 | Reject: initialization falls back too broadly |
-| Adaptive granularity + child trace | 234.350 | 0 | Keep |
-| Adaptive + unpruned name closure | 380.646 | 0 | Reject: dependency cascades and extra analysis cost |
-| Adaptive + deeper serialization closure | 234.350 | 0 | Next candidate |
+The two remaining misses are value edits in widely imported dialect classes (Hive
+`ALIAS_POST_TABLESAMPLE`, Spark2 tokenizer `KEYWORDS`), still on the old selector. On those
+corpora the guard never removed a TPC test that actually failed (0 of 46 checks unsafe).
+The corpora are public competitor-generated mutations; they are evaluation data only and
+are not in the image.
 
-Final local selector CPU: **1.878996 seconds**; local sum approximately **236.229 seconds**. This is not an official container score or three-run median. Previous and current evidence were collected on macOS under different dependency versions; the map explicitly records that provenance. Canonical Docker validation remains outstanding.
+## Remaining opportunity (per 40 commits on the corpus)
 
-## Verification and limits
-
-Five new targeted tests cover transitive helper/alias propagation, ambiguous alias union, initialization fallback, unknown evidence and valid empty certificates. The existing core suite was rerun. Label-free metamorphic checks pass under reversed catalog numbering and renamed patch IDs for all 30 patches; malformed input produces a valid full-selection result.
-
-The public cases are already inspected. These results do not establish unseen-change recall or predict an organizer score below 324. Arbitrary reflection, eval, native boundaries and unobserved dynamic dispatch remain limitations. The unpruned name experiment is retained under research as a rejected approach; no negative reachability claim from it is used to remove tests.
-
-## Run and publish
-
-The Docker default is now `adaptive`. Local reproduction:
-
-```bash
-python3 selector.py --mode adaptive --data-dir /path/to/data
-python3 -m unittest discover -s tests -v
-```
-
-The repository contains no sample patches, answers, credentials or local diagnostic logs. Do not add external development data when committing. The research child profiler expects the original development layout; its output map is already frozen at `maps/source-index.json.gz`.
+* value edits on the old selector: ~60 excess + residual misses;
+* body edits: ~33; structural import-time edits: ~26;
+* frequently over-selected heavy tests: annotate_funcs, generator_memory, TPC-DS.
