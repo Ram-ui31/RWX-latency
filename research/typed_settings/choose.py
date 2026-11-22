@@ -94,14 +94,18 @@ class Settings:
         readers = self.index.map_ids(self.payload["consumers"].get(origin, []))
         readers.update(self.index.map_ids(self.index.payload["reads"].get(path, [])))
         # Attribute reflection / raw reads in test code bypass the application hook.
+        name = key.rsplit(".", 1)[1]
+        by_file = {}
         for test in self.tests:
-            source = self.index.payload["files"].get(test["file"], {}).get("source")
-            if source is None:
-                return selected
-            name = key.rsplit(".", 1)[1]
-            if name in source or any(
-                s in source for s in ("getattr", "__dict__", "getmembers", "vars(")
-            ):
+            hit = by_file.get(test["file"])
+            if hit is None:
+                source = self.index.payload["files"].get(test["file"], {}).get("source")
+                if source is None:
+                    return selected
+                hit = by_file[test["file"]] = name in source or any(
+                    s in source for s in ("getattr", "__dict__", "getmembers", "vars(")
+                )
+            if hit:
                 readers.add(test["number"])
         readers.update(
             t["number"]

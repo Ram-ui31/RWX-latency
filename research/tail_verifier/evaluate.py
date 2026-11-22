@@ -98,7 +98,7 @@ def main():
  if guard:
   gnum={s:ids.get(t) for s,t in GUARD_TESTS.items() if ids.get(t) is not None}
   est={'tpcds':2.0,'tpch':0.4,'opt_tpch':0.7}
-  gcpu=0.0;gbudget=float(os.environ.get('RWX_TPC_GUARD_BUDGET','60'));gstart=time.monotonic()
+  gcpu=0.0;gbudget=min(float(os.environ.get('RWX_TPC_GUARD_BUDGET','60')),1.0*len(rows));gstart=time.monotonic()
   def gain_of(sel,remove):
    return (schedule_cost(optimize_schedule(sel,ds),ds)-schedule_cost(optimize_schedule(sel-remove,ds),ds))/1000
   order=[]
@@ -117,7 +117,7 @@ def main():
     if not el:continue
     g=gain_of(r['selected'],{gnum[s] for s in el})
     if g<0.8+sum(est[s] for s in el)+0.5:continue
-   status,used=guard.check(source,texts[c],el,fx);gcpu+=used
+   status,used=guard.check(source,texts[c],el,fx,exec_budget=min(8.0,max(0.0,0.45*g-3.0),max(0.0,gbudget-gcpu-3.0)) if 'tpcds' in el else 0.0);gcpu+=used
    r['guard']={'status':status,'cpu':used,'gain':g}
    for s,v in status.items():
     if v=='equal':r['selected'].discard(gnum[s])

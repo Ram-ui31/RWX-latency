@@ -99,7 +99,7 @@ class Guard:
         checks = [f for f in fixtures if f in (self.TPCH_SQL, self.TPCDS_SQL)]
         return out, checks
 
-    def check(self, source, text, suites, fixtures=(), timeout=30):
+    def check(self, source, text, suites, fixtures=(), timeout=30, exec_budget=0.0):
         info = self.analyze(source, text)
         lines = None
         if info:
@@ -128,7 +128,8 @@ class Guard:
                 edited = Path(tmp) / 'edited.json'
                 edited.write_text(json.dumps(sorted(f'{f}:{n}' for f, n in (lines or ()))))
                 env = {**os.environ, 'PYTHONDONTWRITEBYTECODE': '1', 'PYTHONPATH': str(tree),
-                       'RWX_PINNED_ROOT': str(Path(source).resolve())}
+                       'RWX_PINNED_ROOT': str(Path(source).resolve()), 'SKIP_INTEGRATION': '0',
+                       'RWX_GUARD_EXEC_BUDGET': str(exec_budget)}
                 if lines is not None:
                     env['RWX_GUARD_EDITED'] = str(edited)
                 args = [*suites, *('fixture=' + str(tree / f) for f in fixtures)]

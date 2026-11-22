@@ -21,6 +21,7 @@ identical inputs and runs unchanged code.
 import json
 import os
 import sys
+import time
 
 sys.setrecursionlimit(50000)
 
@@ -238,10 +239,12 @@ def build(root, output):
         queries = []
         for meta, sql, expected in helpers.load_sql_fixture_pairs(cfg['fixture']):
             queries.append(dict(sql=sql, expected=expected, execute=bool(meta.get('execute'))))
+        exec_cost = [None] * len(queries)
         if cfg['execute']:
-            for q in queries:
+            for qi, q in enumerate(queries):
                 if not q['execute']:
                     continue
+                tick = time.process_time()
                 state['record'] = False
                 expression = parse_one(q['sql'])
                 state['record'] = True
@@ -256,11 +259,13 @@ def build(root, output):
                 table = PythonExecutor(tables=tables_).execute(plan)
                 table = pickle.loads(pickle.dumps(table))
                 pd.DataFrame(((np.nan if c is None else c for c in r) for r in table.rows), columns=table.columns)
+                exec_cost[qi] = round(time.process_time() - tick, 4)
         # DuckDB execution of transpiled SQL needs no SQLGlot code beyond transpile (compared).
         state['record'] = False
         outputs = stage_outputs(suite, queries, schema_dict)
         state['record'] = True
-        result['suites'][suite] = dict(test=cfg['test'], schema=cfg['schema'], queries=queries, outputs=outputs)
+        result['suites'][suite] = dict(test=cfg['test'], schema=cfg['schema'], queries=queries, outputs=outputs,
+                                       exec_cost=exec_cost)
         per_suite_outside[suite] = outside_before | outside
     # Lines recorded at any point belong to every suite (shared imports/setup).
     for suite in SUITES:
@@ -304,13 +309,55 @@ def check(tree, baseline, suites):
         only = None
         if edited is not None:
             only = {i for i, ls in enumerate(s['query_lines']) if ls is None or not edited.isdisjoint(ls)}
+        budget = float(os.environ.get('RWX_GUARD_EXEC_BUDGET', '0'))
         try:
-            got = stage_outputs(suite, s['queries'], schema, s['outputs'], only)
-            results[suite] = 'equal' if got == s['outputs'] else 'differs'
+            if suite == 'tpcds' and budget > 0:
+                differing = []
+                for i, q in enumerate(s['queries']):
+                    if only is not None and i not in only:
+                        continue
+                    if query_output(suite, q, schema) != s['outputs'][i]:
+                        differing.append(i)
+                        cost = sum(s['exec_cost'][j] or 0 for j in differing) + 2.0
+                        if cost > budget:
+                            raise RuntimeError('execution budget')
+                results[suite] = 'equal' if not differing else execute_queries(differing)
+            else:
+                got = stage_outputs(suite, s['queries'], schema, s['outputs'], only)
+                results[suite] = 'equal' if got == s['outputs'] else 'differs'
         except Exception as ex:  # noqa: BLE001 - any failure leaves the test selected
             results[suite] = 'error:' + type(ex).__name__
     print(json.dumps(results))
     return 0
+
+
+def execute_queries(indices):
+    """Run the original TPC-DS subtests of the given queries with the patched SQLGlot.
+
+    Their parse/transpile/optimize/plan outputs changed; every other query's stays
+    identical and runs only unchanged code, so passing these subtests means the
+    whole test passes.
+    """
+    import pickle
+    sys.path.insert(1, os.environ['RWX_PINNED_ROOT'])
+    os.environ['SKIP_INTEGRATION'] = '0'
+    import tests.test_executor as te
+    from tests.helpers import TPCDS_SCHEMA
+    from sqlglot import parse_one
+    te.TestExecutor.setUpClass()
+    case = te.TestExecutor('test_execute_tpcds')
+    te.initializer(TPCDS_SCHEMA, te.TestExecutor.tpcds_tables)
+    try:
+        for i in indices:
+            meta, sql, _ = te.TestExecutor.tpcds_sqls[i]
+            table = te.mp_execute(pickle.loads(pickle.dumps(parse_one(sql))), meta)
+            if table is not None:
+                case.subtestHelper(i, table, tpch=False)
+    except Exception:  # noqa: BLE001
+        return 'differs'
+    finally:
+        te.TestExecutor.tearDownClass()
+    return 'equal'
 
 
 def lines_mode(root, output):
