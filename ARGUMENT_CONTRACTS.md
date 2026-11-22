@@ -1,5 +1,7 @@
 # Argument contracts and CPU-aware verification
 
+Recommended code: `98123948830907202338bcb4a7e2e99b7d9829e0`, on branch `rwx-native-evaluation-20261121`. Its [final native default-build check](https://github.com/Ram-ui31/RWX-latency/actions/runs/44965427261) passed: public scheduled time 109.440 seconds plus 17.773368 median CPU seconds, **127.213368 seconds total**, with zero missed patches in three runs. Group verification disabled measured 130.516737, and the older cost policy measured 131.012795. Earlier lower totals below belong to their stated commits and builds. No new organizer/private score is available.
+
 ## Decision
 
 Replace broad import-time invalidation for a precisely supported class of edits with a compiled dependency model of argument validation. Use original-test execution for remaining uncertainty, and price that execution with CPU measurements from the build environment.

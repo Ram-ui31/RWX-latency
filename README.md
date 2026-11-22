@@ -9,13 +9,17 @@ The current candidate compiles argument-field dependencies through inheritance a
 | Evaluation | Scheduled seconds | Selector CPU seconds | Total seconds | Missed patches |
 |---|---:|---:|---:|---:|
 | Latest user-reported organizer result, older submitted candidate | 280.548 | 8.990 median | 289.538 median | 0 |
-| Public, corrected contracts/import guard (`748e3fd`), native amd64 | 109.440 | 16.287 median | 125.727 median | 0 |
-| Twelve frozen argument checks, same native candidate | 63.323 | 7.265 median | 70.588 median | 0 |
-| Four composed-schema/import checks, same native candidate | 55.651 | 1.586 median | 57.237 median | 0 |
+| Recommended default (`9812394`), public, native amd64 | 109.440 | 17.773 median | 127.213 median | 0 |
+| Twelve frozen argument checks, guarded candidate (`748e3fd`), native | 63.323 | 7.265 median | 70.588 median | 0 |
+| Four composed-schema/import checks, guarded candidate (`748e3fd`), native | 55.651 | 1.586 median | 57.237 median | 0 |
 
 Native figures are medians of three actual offline containers. The sixteen additional cases were frozen before labeling and independently ran or accounted for all 1,620 original tests per case. Ten patches caused failures, comprising 1,274 failing whole-test instances across patches; all were retained. This corpus covers argument metadata, composed schemas and an import failure. It does not establish accuracy on the private distribution.
 
-The import case exposed 162 omitted import-related failures in the older broad map. The corrected model selects every catalog test and disables live pruning for that hazard. Workflow [44959722803](https://github.com/Ram-ui31/RWX-latency/actions/runs/44959722803) validated that correction. The subsequent comparison in [44963605224](https://github.com/Ram-ui31/RWX-latency/actions/runs/44963605224) completed successfully. Cache-off measured 125.687700 seconds on public inputs and 70.950210 on the twelve-case corpus, with zero misses. Reference memoization produced no scheduling saving on native Linux and added overhead, so it is excluded from the recommended default. A final default-build confirmation is recorded below when complete. No new organizer score is available. A private score below 150 seconds and a top-three finish remain unverified.
+The import case exposed 162 omitted import-related failures in the older broad map. The corrected model selects every catalog test and disables live pruning for that hazard. Workflow [44959722803](https://github.com/Ram-ui31/RWX-latency/actions/runs/44959722803) validated that correction. The full sixteen-case native recheck in [44963605224](https://github.com/Ram-ui31/RWX-latency/actions/runs/44963605224) retained every failure too. Its cache comparison found no native scheduling saving and extra CPU overhead, so reference memoization is excluded from the default.
+
+Final default-build workflow [44965427261](https://github.com/Ram-ui31/RWX-latency/actions/runs/44965427261) passed on `98123948830907202338bcb4a7e2e99b7d9829e0`. Public median total was 127.213368 seconds, versus 130.516737 with group verification disabled and 131.012795 with the older cost estimate. Timing varies across runners and build calibrations; the final default figure is the submission reference, rather than the lowest historical run.
+
+No new organizer score is available. A private score below 150 seconds and a top-three finish remain unverified.
 
 See [the current proposal and risk analysis](ARGUMENT_CONTRACTS.md) for the architecture, evidence, dead ends, research sources and conditional private-score calculation. Earlier development records are retained in [DISTRIBUTION_AUDIT.md](DISTRIBUTION_AUDIT.md), [CPU_TRADEOFF.md](CPU_TRADEOFF.md), [OBSERVATIONS.md](OBSERVATIONS.md) and [the public repository review](PUBLIC_REPOS_AND_NEXT_STEPS.md). Their earlier measurements are historical.
 
