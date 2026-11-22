@@ -11,9 +11,11 @@ COPY research/tail_verifier/ /app/research/tail_verifier/
 COPY research/observations/ /app/research/observations/
 COPY research/typed_settings/ /app/research/typed_settings/
 COPY research/group_verifier/ /app/research/group_verifier/
+COPY research/tpcds_guard/ /app/research/tpcds_guard/
 COPY research/state_diff/choose.py research/state_diff/compile_metadata.py /app/research/state_diff/
 COPY selector.py run_candidate.py build-catalog.json /app/
 COPY maps/source-index.json.gz /app/maps/source-index.json.gz
+COPY maps/isolated-coverage.json.gz /app/maps/isolated-coverage.json.gz
 COPY tools/check_native.py /app/tools/check_native.py
 RUN python -X faulthandler /app/tools/check_native.py
 ENV RWX_OBSERVATIONS=/app/assets/observations.json.gz
@@ -25,6 +27,8 @@ ENV RWX_GROUP_VERIFY=1
 ENV RWX_TYPED_SETTINGS=/app/assets/settings.json.gz
 ENV RWX_ARGUMENT_CONTRACTS=/app/assets/arguments.json.gz
 RUN python /app/research/group_verifier/calibrate.py --source /app/pinned-source --catalog /app/build-catalog.json --output /app/assets/group-costs.json
+RUN python /app/research/tpcds_guard/guard.py build /app/pinned-source /app/assets/tpc-guard.json
+ENV RWX_ISOLATED=/app/maps/isolated-coverage.json.gz RWX_TPC_GUARD=/app/assets/tpc-guard.json RWX_TPC_GUARD_BUDGET=40
 RUN chmod -R a+rX /app
 USER 65534:65534
 ENTRYPOINT ["python3", "-B", "/app/run_candidate.py"]
