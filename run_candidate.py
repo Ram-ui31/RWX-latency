@@ -16,7 +16,7 @@ def main():
   observations=os.environ.get('RWX_OBSERVATIONS')
   settings=os.environ.get('RWX_TYPED_SETTINGS')
   contracts=os.environ.get('RWX_ARGUMENT_CONTRACTS')
-  run([ROOT/'research/tail_verifier/evaluate.py','--source',source,'--data',data,'--cost-profile',ROOT/'assets/verification-costs.json','--report',folder/'tail.json','--predictions',upstream,'--max-actions','5','--min-saving','2','--cpu-budget','20','--action-timeout','8','--wall-budget','45',*(['--observations',observations] if observations else []),*(['--settings',settings] if settings else []),*(['--contracts',contracts] if contracts else [])])
+  run([ROOT/'research/tail_verifier/evaluate.py','--source',source,'--data',data,'--cost-profile',ROOT/'assets/verification-costs.json','--report',folder/'tail.json','--predictions',upstream,'--max-actions',os.environ.get('RWX_TAIL_ACTIONS','5'),'--min-saving','2','--cpu-budget',os.environ.get('RWX_TAIL_CPU','20'),'--action-timeout','8','--wall-budget','45',*(['--observations',observations] if observations else []),*(['--settings',settings] if settings else []),*(['--contracts',contracts] if contracts else [])])
   if observations:
    memo=folder/'memo.jsonl'
    if os.environ.get('RWX_NATIVE_ORACLE') and os.environ.get('RWX_NATIVE_MEMO_ENABLE','1')=='1':
@@ -26,7 +26,7 @@ def main():
     except (RuntimeError,OSError,ValueError):pass
    if os.environ.get('RWX_GROUP_VERIFY')=='1':
     try:
-     run([ROOT/'research/group_verifier/run.py','--source',source,'--data',data,'--upstream',upstream,'--output',final,'--report',folder/'groups.json','--selection-report',folder/'tail.json','--minimal','--cheap-modules','--seconds-factor','0.1','--budget','20','--wall-budget','80',*(['--cost-profile',ROOT/'assets/group-costs.json'] if os.environ.get('RWX_GROUP_PROFILE','1')=='1' and (ROOT/'assets/group-costs.json').is_file() else [])])
+     run([ROOT/'research/group_verifier/run.py','--source',source,'--data',data,'--upstream',upstream,'--output',final,'--report',folder/'groups.json','--selection-report',folder/'tail.json','--minimal','--cheap-modules','--seconds-factor','0.1','--budget',os.environ.get('RWX_GROUP_CPU','20'),'--wall-budget',os.environ.get('RWX_GROUP_WALL','80'),*(['--cost-profile',ROOT/'assets/group-costs.json'] if os.environ.get('RWX_GROUP_PROFILE','1')=='1' and (ROOT/'assets/group-costs.json').is_file() else [])])
     except (RuntimeError,OSError):final=upstream
    else:final=upstream
    sys.stdout.write(final.read_text());sys.stdout.flush();return

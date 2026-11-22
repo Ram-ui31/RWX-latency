@@ -15,6 +15,7 @@ from engine.selection import adaptive_select
 from engine.ipc import consumers
 from engine.runner import PatchedTree,run_test
 from engine.verification_budget import gate
+from engine.reduce import reduce_patch
 
 def best_action(selected,durations,excluded):
     base=schedule_cost(optimize_schedule(selected,durations),durations)
@@ -29,8 +30,9 @@ def main():
  ap=argparse.ArgumentParser();ap.add_argument('--source',type=Path,required=True);ap.add_argument('--data',type=Path,required=True);ap.add_argument('--report',type=Path,required=True);ap.add_argument('--predictions',type=Path,required=True);ap.add_argument('--wall-budget',type=float,default=45);ap.add_argument('--cpu-budget',type=float,default=60);ap.add_argument('--action-timeout',type=float,default=8);ap.add_argument('--min-saving',type=float,default=5);ap.add_argument('--max-actions',type=int,default=5);ap.add_argument('--cost-profile',type=Path);ap.add_argument('--observations',type=Path);ap.add_argument('--settings',type=Path);ap.add_argument('--contracts',type=Path);ap.add_argument('--allow-uncalibrated-experiment',action='store_true');a=ap.parse_args()
  if min(a.cpu_budget,a.min_saving,a.max_actions)<0 or a.action_timeout<=0:ap.error('invalid budget')
  start=time.process_time();wall=time.monotonic();usage=resource.getrusage(resource.RUSAGE_CHILDREN)
+ excluded_cpu=[0.0]
  def cpu():
-  r=resource.getrusage(resource.RUSAGE_CHILDREN);return time.process_time()-start+r.ru_utime+r.ru_stime-usage.ru_utime-usage.ru_stime
+  r=resource.getrusage(resource.RUSAGE_CHILDREN);return time.process_time()-start+r.ru_utime+r.ru_stime-usage.ru_utime-usage.ru_stime-excluded_cpu[0]
  source=a.source.resolve()
  from engine.source_origin import verify
  verify(source)
@@ -41,19 +43,87 @@ def main():
   observer=Observations(a.observations,index,a.settings,tests,a.contracts)
  else:
   ipc=consumers(index.payload,tests)
+ iso=None
+ import os
+ if os.environ.get('RWX_ISOLATED'):
+  try:
+   from engine.isosel import IsolatedCoverage,select as iso_select
+   iso=IsolatedCoverage(os.environ['RWX_ISOLATED'],{t['id']:n for n,t in tests.items()} if isinstance(tests,dict) else {t['id']:t['number'] for t in tests})
+  except Exception as ex:
+   print('isolated coverage unavailable: '+repr(ex),file=sys.stderr);iso=None
+ def readers(path):
+  return set(index.map_ids(index.payload.get('reads',{}).get(path,[])))
  rows={};texts={}
  for patch in sorted((a.data/'commits').glob('*.patch')):
   text=patch.read_text()
+  iso_selected,iso_notes=set(),[]
+  if iso is not None:
+   try:
+    r=iso_select(iso,source,text,readers,refine=observer.operand_refinement if observer else None)
+   except Exception:
+    r=None
+   if r is not None and r[2]:
+    iso_selected,rest,iso_notes=r
+    text_for_rest=rest
+   else:text_for_rest=text
+  else:text_for_rest=text
   try:
-   if observer:
-    selected,reason=observer.select(text),'baseline_observations'
+   reduced,extra,dropped=reduce_patch(source,text_for_rest,index) if text_for_rest.strip() else ('',set(),[])
+  except Exception:
+   reduced,extra,dropped=text_for_rest,set(),[]
+  extra=extra|iso_selected
+  if observer and observer.contracts:observer.contracts.import_hazard=False
+  try:
+   if not reduced.strip():
+    selected,reason=set(extra),'docstring_comment_only'
+   elif observer:
+    selected,reason=observer.select(reduced)|extra,'baseline_observations'
    else:
-    selected,reason=adaptive_select(index,text)
-    for e in parse_patch(text):selected.update(ipc.get(e.old_path,[]))
+    selected,reason=adaptive_select(index,reduced)
+    selected|=extra
+    for e in parse_patch(reduced):selected.update(ipc.get(e.old_path,[]))
   except (ValueError,SyntaxError,OSError):
    selected,reason=set(ds),'unsupported_patch'
+  if dropped:reason+=';reduced:'+','.join(dropped)
+  if iso_notes:reason+=';isolated:'+','.join(iso_notes)
   hazard=bool(observer and observer.contracts and observer.contracts.import_hazard)
   texts[patch.stem]=text;rows[patch.stem]={'initial':sorted(selected),'selected':set(selected),'reason':reason,'import_hazard':hazard,'actions':[],'tried':set(selected) if hazard else set()}
+ guard=None
+ if os.environ.get('RWX_TPC_GUARD'):
+  try:
+   from research.tpcds_guard.apply import Guard,TESTS as GUARD_TESTS
+   guard=Guard(os.environ['RWX_TPC_GUARD'])
+  except Exception as ex:
+   print('tpc guard unavailable: '+repr(ex),file=sys.stderr);guard=None
+ if guard:
+  gnum={s:ids.get(t) for s,t in GUARD_TESTS.items() if ids.get(t) is not None}
+  est={'tpcds':2.0,'tpch':0.4,'opt_tpch':0.7}
+  gcpu=0.0;gbudget=float(os.environ.get('RWX_TPC_GUARD_BUDGET','60'));gstart=time.monotonic()
+  def gain_of(sel,remove):
+   return (schedule_cost(optimize_schedule(sel,ds),ds)-schedule_cost(optimize_schedule(sel-remove,ds),ds))/1000
+  order=[]
+  for c,r in rows.items():
+   suites=[s for s,n in gnum.items() if n in r['selected']]
+   if suites:order.append((gain_of(r['selected'],{gnum[s] for s in suites}),c,suites))
+  for g0,c,suites in sorted(order,reverse=True):
+   if gcpu>=gbudget or time.monotonic()-gstart>gbudget*1.25:break
+   r=rows[c]
+   try:el,fx=guard.eligible_suites(source,texts[c],suites)
+   except Exception:el,fx=[],[]
+   if not el:continue
+   g=gain_of(r['selected'],{gnum[s] for s in el})
+   if g<0.8+sum(est[s] for s in el)+0.5:
+    el=[s for s in el if s!='tpcds']
+    if not el:continue
+    g=gain_of(r['selected'],{gnum[s] for s in el})
+    if g<0.8+sum(est[s] for s in el)+0.5:continue
+   status,used=guard.check(source,texts[c],el,fx);gcpu+=used
+   r['guard']={'status':status,'cpu':used,'gain':g}
+   for s,v in status.items():
+    if v=='equal':r['selected'].discard(gnum[s])
+  # The guard has its own budget; later verification budgets start after it.
+  excluded_cpu[0]+=gcpu
+  wall+=time.monotonic()-gstart
  actions=0
  cost_data={}
  cost_profile_status='missing'
